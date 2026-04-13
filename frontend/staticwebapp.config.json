@@ -43,6 +43,10 @@
     }
   ],
   "responseOverrides": {
+    "401": {
+      "redirect": "/.auth/login/github",
+      "statusCode": 302
+    },
     "403": {
       "rewrite": "/403.html"
     }

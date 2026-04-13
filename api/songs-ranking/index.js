@@ -17,7 +17,7 @@ const {
   internalServerError
 } = require('../shared/http');
 const { normalizeTags } = require('../shared/validation');
-const { getOwnerId } = getOwnerId(req);
+const { getOwnerId } = require('../shared/auth');
 
 const container = getContainer();
 

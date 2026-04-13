@@ -22,7 +22,7 @@ const {
   normalizeSearchTarget,
   normalizeTags
 } = require('../shared/validation');
-const { getOwnerId } = getOwnerId(req);
+const { getOwnerId } = require('../shared/auth');
 
 const TAG_SUGGEST_LIMIT = 10;
 const container = getContainer();

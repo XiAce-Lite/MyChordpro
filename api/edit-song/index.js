@@ -9,7 +9,7 @@ const {
   jsonResponse
 } = require('../shared/http');
 const { normalizeSongBody } = require('../shared/validation');
-const { getOwnerId } = require('../shared/auth');
+const { getOwnerId } = getOwnerId(req);
 
 const container = getContainer();
 

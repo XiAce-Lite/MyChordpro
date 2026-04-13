@@ -7,7 +7,7 @@ const {
   internalServerError,
   jsonResponse
 } = require('../shared/http');
-const { getOwnerId } = require('../shared/auth');
+const { getOwnerId } = getOwnerId(req);
 
 const container = getContainer();
 

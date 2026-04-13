@@ -631,7 +631,7 @@ async function saveSongMetaModal() {
 
   try {
     const response = await fetch(
-      buildEditSongApiUrl(currentSongData.artist, currentSongData.id),
+      buildEditSongApiUrl(currentSongData.id),
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

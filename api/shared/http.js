@@ -6,20 +6,44 @@ function jsonResponse(status, body) {
   };
 }
 
-function badRequest() {
-  return jsonResponse(400, { error: 'BadRequest' });
+function badRequest(detail = '') {
+  const body = { error: 'BadRequest' };
+  if (detail) {
+    body.detail = detail;
+  }
+  return jsonResponse(400, body);
 }
 
-function unauthorized() {
-  return jsonResponse(401, { error: 'Unauthorized' });
+function unauthorized(detail = '') {
+  const body = { error: 'Unauthorized' };
+  if (detail) {
+    body.detail = detail;
+  }
+  return jsonResponse(401, body);
 }
 
-function notFound() {
-  return jsonResponse(404, { error: 'NotFound' });
+function notFound(detail = '') {
+  const body = { error: 'NotFound' };
+  if (detail) {
+    body.detail = detail;
+  }
+  return jsonResponse(404, body);
 }
 
-function conflict() {
-  return jsonResponse(409, { error: 'Conflict' });
+function conflict(detail = '') {
+  const body = { error: 'Conflict' };
+  if (detail) {
+    body.detail = detail;
+  }
+  return jsonResponse(409, body);
+}
+
+function methodNotAllowed(detail = '') {
+  const body = { error: 'MethodNotAllowed' };
+  if (detail) {
+    body.detail = detail;
+  }
+  return jsonResponse(405, body);
 }
 
 function serverConfigError(detail = 'Missing COSMOS_ENDPOINT or COSMOS_KEY.') {
@@ -39,6 +63,7 @@ module.exports = {
   unauthorized,
   notFound,
   conflict,
+  methodNotAllowed,
   serverConfigError,
   internalServerError
 };

@@ -1023,7 +1023,7 @@ async function handleDeleteSong() {
 
   try {
     const response = await fetch(
-      buildEditSongApiUrl(artist, id),
+      buildEditSongApiUrl(id),
       {
         method: 'DELETE',
         credentials: 'include'

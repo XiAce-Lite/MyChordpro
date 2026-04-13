@@ -123,7 +123,7 @@ async function loadSongForEdit() {
 
   try {
     const response = await fetch(
-      buildSongApiUrl(state.originalArtist, state.originalId),
+      buildSongApiUrl(state.originalId),
       { credentials: 'include' }
     );
 
@@ -179,7 +179,7 @@ async function handleDelete() {
 
   try {
     const response = await fetch(
-      buildEditSongApiUrl(state.originalArtist, state.originalId),
+      buildEditSongApiUrl(state.originalId),
       {
         method: 'DELETE',
         credentials: 'include'
@@ -252,7 +252,7 @@ async function handleSubmit(event) {
 
   const isEdit = state.mode === 'edit';
   const endpoint = isEdit
-    ? buildEditSongApiUrl(state.originalArtist, state.originalId)
+    ? buildEditSongApiUrl(state.originalId)
     : buildApiUrl('/api/edit-song');
 
   state.isSubmitting = true;

@@ -40,7 +40,7 @@ async function loadSong() {
 
   try {
     const response = await fetch(
-      buildSongApiUrl(artist, id),
+      buildSongApiUrl(id),
       { credentials: 'include' }
     );
 
@@ -303,7 +303,7 @@ function initializeDisplayPreferencesUi() {
   commentWeightInput?.addEventListener('change', commitDisplayPreferences);
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function bindTransposeControls() {
   document.getElementById('transpose-down').addEventListener('click', () => {
     transposeSemitones = clampTranspose(transposeSemitones - 1);
     reRender();
@@ -325,7 +325,10 @@ document.addEventListener('DOMContentLoaded', () => {
       reRender();
     });
   });
+}
 
+function initializeSongPage() {
+  bindTransposeControls();
   window.ChordWikiAuth?.applyRoleVisibility();
   initializeSongAnnotationsUi();
   initializeAutoScrollUi();
@@ -335,4 +338,6 @@ document.addEventListener('DOMContentLoaded', () => {
   updateAutoScrollSafeTop();
   window.requestAnimationFrame(updateAutoScrollSafeTop);
   loadSong();
-});
+}
+
+document.addEventListener('DOMContentLoaded', initializeSongPage);

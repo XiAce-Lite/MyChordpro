@@ -1,3 +1,13 @@
+const {
+  AUTO_SCROLL_STORAGE_PREFIX,
+  SONG_PREFS_STORAGE_PREFIX,
+  AUTO_SCROLL_COLLAPSED_STORAGE_KEY,
+  SONG_EXTRAS_COLLAPSED_STORAGE_KEY,
+  DISPLAY_PREFS_STORAGE_KEY,
+  DISPLAY_PREFS_COLLAPSED_STORAGE_KEY,
+  buildSongScopedKey
+} = window.ChordWikiStorageKeys;
+
 /*
  * 動作確認メモ
  * - 曲ページを開き、譜面左側に Start / End ピンが表示されることを確認する。
@@ -52,12 +62,6 @@ const MARKER_EDGE_SCROLL_ZONE_PX = 64;
 const MARKER_EDGE_SCROLL_BASE_SPEED = 180;
 const MARKER_EDGE_SCROLL_MAX_SPEED = 1600;
 const MARKER_EDGE_SCROLL_POINTER_SPEED_FACTOR = 0.35;
-const AUTO_SCROLL_STORAGE_PREFIX = 'autoscroll:v1';
-const SONG_PREFS_STORAGE_PREFIX = 'prefs:v1';
-const AUTO_SCROLL_COLLAPSED_STORAGE_KEY = 'autoscrollCollapsed';
-const SONG_EXTRAS_COLLAPSED_STORAGE_KEY = 'songExtrasCollapsed';
-const DISPLAY_PREFS_STORAGE_KEY = 'displayPrefs:v1';
-const DISPLAY_PREFS_COLLAPSED_STORAGE_KEY = 'displayPrefsCollapsed';
 const CHORD_ALLOWED_PATTERN = /^[A-G](#|b)?((?:m|M|maj|min|sus[0-9]*|add[0-9]*|dim|aug)*[0-9]*(?:-[0-9]+)?)(?:\([^)]+\)|\{[^}]+\})*(?:\/[A-G](#|b)?(?:\([^)]+\)|\{[^}]+\})*)?$/i;
 const NARROW_SYMBOL_PATTERN = /^(?:[\-=≫≧＞>!~]+|n\.c\.?)$/i;
 const LOCAL_TEST_SONG_SCRIPT_PATH = './.local/local-test-song.js';
@@ -155,11 +159,11 @@ function getQueryParam(name) {
 }
 
 function getSongStorageKey(artist, id) {
-  return `${AUTO_SCROLL_STORAGE_PREFIX}:${artist}:${id}`;
+  return buildSongScopedKey(AUTO_SCROLL_STORAGE_PREFIX, artist, id);
 }
 
 function getSongPrefsStorageKey(artist, id) {
-  return `${SONG_PREFS_STORAGE_PREFIX}:${artist}:${id}`;
+  return buildSongScopedKey(SONG_PREFS_STORAGE_PREFIX, artist, id);
 }
 
 function isLocalFilePreview() {

@@ -1,26 +1,18 @@
 const { getContainer } = require('../shared/cosmos');
 const {
   jsonResponse,
-  unauthorized,
-  serverConfigError,
   internalServerError
 } = require('../shared/http');
-const { getOwnerId } = require('../shared/auth');
+const { resolveAuthorizedOwnerContext } = require('../shared/request-context');
 
 const container = getContainer();
 
 module.exports = async function (context, req) {
-  const ownerId = getOwnerId(req);
-
-  if (!ownerId) {
-    context.res = unauthorized();
+  const requestContext = resolveAuthorizedOwnerContext(context, req, container);
+  if (!requestContext) {
     return;
   }
-
-  if (!container) {
-    context.res = serverConfigError();
-    return;
-  }
+  const { ownerId } = requestContext;
 
   try {
     const query = {

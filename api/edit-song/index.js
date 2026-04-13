@@ -1,22 +1,20 @@
 const { getContainer } = require('../shared/cosmos');
 const {
   badRequest,
-  unauthorized,
   notFound,
   conflict,
-  serverConfigError,
   internalServerError,
-  jsonResponse
+  methodNotAllowed
 } = require('../shared/http');
 const { normalizeSongBody } = require('../shared/validation');
-const { getOwnerId } = require('../shared/auth');
+const { resolveAuthorizedOwnerContext } = require('../shared/request-context');
 
 const container = getContainer();
 
 async function handleCreate(context, req, ownerId) {
   const parsed = normalizeSongBody(req.body, { requireId: true });
   if (parsed.error) {
-    context.res = badRequest();
+    context.res = badRequest(parsed.error);
     return;
   }
 
@@ -72,19 +70,19 @@ async function handleUpdate(context, req, ownerId) {
   const originalId = String(req.query?.id || context.bindingData.id || '').trim();
 
   if (!originalId) {
-    context.res = badRequest();
+    context.res = badRequest('id is required.');
     return;
   }
 
   const parsed = normalizeSongBody(req.body, { fallbackId: originalId, requireId: false });
   if (parsed.error) {
-    context.res = badRequest();
+    context.res = badRequest(parsed.error);
     return;
   }
 
   const nextItem = parsed.value;
   if (nextItem.id && nextItem.id !== originalId) {
-    context.res = badRequest();
+    context.res = badRequest('id cannot be changed.');
     return;
   }
 
@@ -113,7 +111,7 @@ async function handleDelete(context, req, ownerId) {
   const originalId = String(req.query?.id || context.bindingData.id || '').trim();
 
   if (!originalId) {
-    context.res = badRequest();
+    context.res = badRequest('id is required.');
     return;
   }
 
@@ -132,16 +130,13 @@ async function handleDelete(context, req, ownerId) {
 
 module.exports = async function (context, req) {
   try {
-    if (!container) {
-      context.res = serverConfigError('Missing COSMOS_ENDPOINT or COSMOS_KEY');
+    const requestContext = resolveAuthorizedOwnerContext(context, req, container, {
+      serverConfigDetail: 'Missing COSMOS_ENDPOINT or COSMOS_KEY'
+    });
+    if (!requestContext) {
       return;
     }
-
-    const ownerId = getOwnerId(req);
-    if (!ownerId) {
-      context.res = unauthorized();
-      return;
-    }
+    const { ownerId } = requestContext;
 
     const method = String(req.method || '').toUpperCase();
 
@@ -160,7 +155,7 @@ module.exports = async function (context, req) {
       return;
     }
 
-    context.res = jsonResponse(405, { error: 'MethodNotAllowed', detail: `Unsupported method: ${method}` });
+    context.res = methodNotAllowed(`Unsupported method: ${method}`);
   } catch (error) {
     context.log.error(error);
     context.res = internalServerError(error);

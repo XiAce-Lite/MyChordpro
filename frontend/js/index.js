@@ -42,6 +42,29 @@ const DEFAULT_PAGE_SIZE = 30;
       fallbackLogged: false
     };
 
+    const localFallbackService = window.ChordWikiIndexLocalFallback?.createIndexLocalFallbackService({
+      scriptPath: LOCAL_TEST_SONGS_SCRIPT_PATH,
+      globalKey: LOCAL_TEST_SONGS_GLOBAL_KEY,
+      state: localTestSongsState,
+      isLocalPreview,
+      normalizeLocalSongSummary,
+      compareSongsForRanking,
+      normalizeSearchQuery,
+      matchesSearch,
+      normalizeSearchTarget,
+      isRankingMode,
+      clampPageSize,
+      clampPage,
+      getCurrentPageSize: () => currentPageSize,
+      rankingPageSize: RANKING_PAGE_SIZE,
+      rankingMaxPages: RANKING_MAX_PAGES,
+      searchMaxPages: SEARCH_MAX_PAGES,
+      rankingMaxSongs: RANKING_MAX_SONGS,
+      buildSongHref,
+      localSamplePanel,
+      localSampleLinks
+    });
+
 function isLocalPreview() {
       return Boolean(window.ChordWikiRuntime?.isLocalPreview?.(window.location))
         || window.location.protocol === 'file:'
@@ -165,92 +188,24 @@ function isLocalPreview() {
     }
 
     async function loadLocalTestSongsData() {
-      if (!isLocalPreview()) {
-        return [];
-      }
-
-      const readSongs = (source) => {
-        const rawSongs = Array.isArray(source)
-          ? source
-          : (Array.isArray(source?.songs) ? source.songs : []);
-
-        return rawSongs
-          .map((song, index) => normalizeLocalSongSummary(song, index))
-          .sort(compareSongsForRanking);
-      };
-
-      const existingSongs = readSongs(window[LOCAL_TEST_SONGS_GLOBAL_KEY]);
-      if (existingSongs.length > 0) {
-        return existingSongs;
-      }
-
-      if (!localTestSongsState.scriptPromise) {
-        localTestSongsState.scriptPromise = new Promise((resolve) => {
-          const scriptEl = document.createElement('script');
-          scriptEl.src = LOCAL_TEST_SONGS_SCRIPT_PATH;
-          scriptEl.async = true;
-          scriptEl.dataset.localTestSongs = 'true';
-          scriptEl.onload = () => resolve(window[LOCAL_TEST_SONGS_GLOBAL_KEY] || null);
-          scriptEl.onerror = () => resolve(null);
-          document.head.appendChild(scriptEl);
-        });
-      }
-
-      return readSongs(await localTestSongsState.scriptPromise);
+      return localFallbackService
+        ? localFallbackService.loadLocalTestSongsData()
+        : [];
     }
 
     async function buildLocalSongsPayload(page = 1, query = '', target = SONG_SEARCH_TARGET, pageSize = currentPageSize) {
-      const localSongs = await loadLocalTestSongsData();
-      if (!Array.isArray(localSongs) || localSongs.length === 0) {
-        return null;
-      }
-
-      const appliedQuery = String(query || '').trim();
-      const safeTarget = normalizeSearchTarget(target);
-      const rankingMode = isRankingMode(appliedQuery, safeTarget);
-      const safePageSize = rankingMode ? RANKING_PAGE_SIZE : clampPageSize(pageSize);
-      const safePage = clampPage(page, rankingMode ? RANKING_MAX_PAGES : SEARCH_MAX_PAGES);
-      const search = normalizeSearchQuery(appliedQuery);
-      const filteredSongs = search.term
-        ? localSongs.filter((song) => matchesSearch(song, search, safeTarget))
-        : localSongs.slice();
-      const limitedSongs = rankingMode
-        ? filteredSongs.slice(0, RANKING_MAX_SONGS)
-        : filteredSongs;
-      const offset = (safePage - 1) * safePageSize;
-
-      return {
-        page: safePage,
-        pageSize: safePageSize,
-        totalSongs: limitedSongs.length,
-        songs: limitedSongs.slice(offset, offset + safePageSize),
-        isLocalFallback: true
-      };
+      void pageSize;
+      return localFallbackService
+        ? localFallbackService.buildLocalSongsPayload(page, query, target)
+        : null;
     }
 
     async function renderLocalSamplePanel() {
-      if (!localSamplePanel || !localSampleLinks || !isLocalPreview()) {
+      if (!localFallbackService) {
         return;
       }
 
-      const localSongs = await loadLocalTestSongsData();
-      if (!Array.isArray(localSongs) || localSongs.length === 0) {
-        localSamplePanel.hidden = true;
-        localSampleLinks.innerHTML = '';
-        return;
-      }
-
-      localSampleLinks.innerHTML = '';
-      localSongs.slice(0, 4).forEach((song) => {
-        const linkEl = document.createElement('a');
-        linkEl.className = 'local-sample-link';
-        linkEl.href = buildSongHref(song);
-        linkEl.textContent = song.title || song.id || 'Local Sample';
-        linkEl.title = song.artist ? `${song.title} / ${song.artist}` : (song.title || song.id || 'Local Sample');
-        localSampleLinks.appendChild(linkEl);
-      });
-
-      localSamplePanel.hidden = false;
+      await localFallbackService.renderLocalSamplePanel();
     }
 
     function normalizeSearchTarget(value) {

@@ -1,9 +1,4 @@
 const {
-  normalizeScore,
-  attachDisplayScore,
-  compareSongsForRanking
-} = require('../shared/ranking-score');
-const {
   MAX_PAGES,
   normalizePage,
   normalizePageSize,
@@ -12,92 +7,33 @@ const {
 const { getContainer } = require('../shared/cosmos');
 const {
   jsonResponse,
-  unauthorized,
-  serverConfigError,
   internalServerError
 } = require('../shared/http');
 const {
-  normalizeText,
   normalizeSearchQuery,
-  normalizeSearchTarget,
-  normalizeTags
+  normalizeSearchTarget
 } = require('../shared/validation');
-const { getOwnerId } = require('../shared/auth');
+const { resolveAuthorizedOwnerContext } = require('../shared/request-context');
+const {
+  rankAndLimitSongs,
+  getPageWindow,
+  matchesSongSearch,
+  collectTagSuggestions
+} = require('../shared/song-catalog');
 
 const TAG_SUGGEST_LIMIT = 10;
 const container = getContainer();
 
-function mapSongSummary(song, now = Date.now()) {
-  return attachDisplayScore({
-    id: song.id,
-    artist: song.artist,
-    title: song.title,
-    slug: song.slug,
-    tags: normalizeTags(song.tags),
-    score: normalizeScore(song.score),
-    last_viewed_at: song.last_viewed_at || null
-  }, now);
-}
-
-function matchesSearch(song, search, target = 'song') {
-  const needle = normalizeText(search.term);
-
-  if (!needle) {
-    return false;
-  }
-
-  if (target === 'tag') {
-    const tags = normalizeTags(song.tags).map((tag) => normalizeText(tag));
-    return tags.some((tag) => tag === needle);
-  }
-
-  const title = normalizeText(song.title);
-  const artist = normalizeText(song.artist);
-
-  if (search.isExact) {
-    return title === needle || artist === needle;
-  }
-
-  return title.includes(needle) || artist.includes(needle);
-}
-
-function collectTagSuggestions(songs, term, limit = TAG_SUGGEST_LIMIT) {
-  const needle = normalizeText(term);
-  if (!needle) {
-    return [];
-  }
-
-  const uniqueTags = new Set();
-  (songs || []).forEach((song) => {
-    normalizeTags(song.tags).forEach((tag) => {
-      if (normalizeText(tag).startsWith(needle)) {
-        uniqueTags.add(tag);
-      }
-    });
-  });
-
-  return Array.from(uniqueTags)
-    .sort((a, b) => a.localeCompare(b, 'ja-JP', { sensitivity: 'base', numeric: true }))
-    .slice(0, limit);
-}
-
 module.exports = async function (context, req) {
-  const ownerId = getOwnerId(req);
-
-  if (!ownerId) {
-    context.res = unauthorized();
+  const requestContext = resolveAuthorizedOwnerContext(context, req, container);
+  if (!requestContext) {
     return;
   }
-
-  if (!container) {
-    context.res = serverConfigError();
-    return;
-  }
+  const { ownerId } = requestContext;
 
   const pageSize = normalizePageSize(req.query.pageSize);
   const totalLimit = calculateTotalLimit(pageSize);
   const page = normalizePage(req.query.page, MAX_PAGES);
-  const offset = (page - 1) * pageSize;
   const now = Date.now();
   const target = normalizeSearchTarget(req.query.target);
   const search = normalizeSearchQuery(req.query.q);
@@ -140,18 +76,19 @@ module.exports = async function (context, req) {
         target,
         query: search.term,
         limit: TAG_SUGGEST_LIMIT,
-        suggestions: collectTagSuggestions(resources || [], search.term)
+        suggestions: collectTagSuggestions(resources || [], search.term, TAG_SUGGEST_LIMIT)
       });
       return;
     }
 
-    const limitedSearchResults = (resources || [])
-      .filter((song) => matchesSearch(song, search, target))
-      .map((song) => mapSongSummary(song, now))
-      .sort((a, b) => compareSongsForRanking(a, b, now))
-      .slice(0, totalLimit);
+    const limitedSearchResults = rankAndLimitSongs(
+      resources,
+      totalLimit,
+      now,
+      (song) => matchesSongSearch(song, search, target)
+    );
 
-    const songs = limitedSearchResults.slice(offset, offset + pageSize);
+    const songs = getPageWindow(limitedSearchResults, page, pageSize);
 
     context.res = jsonResponse(200, {
       page,

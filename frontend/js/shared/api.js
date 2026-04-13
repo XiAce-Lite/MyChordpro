@@ -1,6 +1,8 @@
 (function attachChordWikiApiUtils(global) {
+  const LOGIN_PATH = '/login';
+
   function redirectToLogin() {
-    global.location.href = '/.auth/login/aad';
+    global.location.href = LOGIN_PATH;
   }
 
   function handleUnauthorized(response) {
@@ -16,13 +18,13 @@
     return global.ChordWikiRuntime?.buildApiUrl?.(path) || path;
   }
 
-  function buildSongApiUrl(artist, id) {
+  function buildSongApiUrl(id) {
     const params = new URLSearchParams();
     params.set('id', String(id || '').trim());
     return buildApiUrl(`/api/song?${params.toString()}`);
   }
 
-  function buildEditSongApiUrl(artist, id) {
+  function buildEditSongApiUrl(id) {
     const params = new URLSearchParams();
     params.set('id', String(id || '').trim());
     return buildApiUrl(`/api/edit-song?${params.toString()}`);

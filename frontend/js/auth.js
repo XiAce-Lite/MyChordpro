@@ -31,8 +31,7 @@
 
   async function isEditor() {
     const principal = await getClientPrincipal();
-    const roles = Array.isArray(principal?.userRoles) ? principal.userRoles : [];
-    return roles.includes('editor');
+    return Boolean(String(principal?.userId || '').trim());
   }
 
   async function applyRoleVisibility(root = document) {

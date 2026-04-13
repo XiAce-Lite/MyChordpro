@@ -6,7 +6,7 @@
       "direction": "in",
       "name": "req",
       "methods": ["post", "put", "delete"],
-      "route": "edit/song/{artist?}/{id?}"
+      "route": "edit-song"
     },
     {
       "type": "http",

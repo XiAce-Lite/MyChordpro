@@ -10,8 +10,14 @@ const {
   calculateTotalLimit
 } = require('../shared/pagination');
 const { getContainer } = require('../shared/cosmos');
-const { jsonResponse, serverConfigError } = require('../shared/http');
+const {
+  jsonResponse,
+  unauthorized,
+  serverConfigError,
+  internalServerError
+} = require('../shared/http');
 const { normalizeTags } = require('../shared/validation');
+const { getOwnerId } = require('../shared/auth');
 
 const container = getContainer();
 
@@ -28,6 +34,13 @@ function mapSongSummary(song, now = Date.now()) {
 }
 
 module.exports = async function (context, req) {
+  const ownerId = getOwnerId(req);
+
+  if (!ownerId) {
+    context.res = unauthorized();
+    return;
+  }
+
   if (!container) {
     context.res = serverConfigError();
     return;
@@ -41,11 +54,12 @@ module.exports = async function (context, req) {
 
   try {
     const query = {
-      query: "SELECT c.id, c.artist, c.title, c.slug, c.score, c.last_viewed_at, c.tags FROM c"
+      query: 'SELECT c.id, c.artist, c.title, c.slug, c.score, c.last_viewed_at, c.tags FROM c WHERE c.ownerId = @ownerId',
+      parameters: [{ name: '@ownerId', value: ownerId }]
     };
 
     const { resources } = await container.items.query(query, {
-      enableCrossPartitionQuery: true,
+      partitionKey: ownerId,
       maxItemCount: totalLimit
     }).fetchAll();
 
@@ -66,10 +80,7 @@ module.exports = async function (context, req) {
       songs
     });
   } catch (error) {
-    context.log.error("Failed to load ranking songs:", error);
-    context.res = jsonResponse(500, {
-      error: "InternalServerError",
-      detail: String(error.message || error)
-    });
+    context.log.error('Failed to load ranking songs:', error);
+    context.res = internalServerError(error);
   }
 };

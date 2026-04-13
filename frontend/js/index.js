@@ -1,6 +1,6 @@
 window.ChordWikiAuth?.applyRoleVisibility();
 
-const { buildApiUrl } = window.ChordWikiApiUtils;
+const { buildApiUrl, handleUnauthorized } = window.ChordWikiApiUtils;
 
 document.getElementById('add-button').addEventListener('click', () => {
   location.href = '/edit.html?mode=add';
@@ -435,9 +435,13 @@ function isLocalPreview() {
 
       try {
         const response = await fetch(
-          buildApiUrl(`/api/songs/search?target=${encodeURIComponent(TAG_SEARCH_TARGET)}&suggest=1&q=${encodeURIComponent(safeQuery)}`),
+          buildApiUrl(`/api/songs-search?target=${encodeURIComponent(TAG_SEARCH_TARGET)}&suggest=1&q=${encodeURIComponent(safeQuery)}`),
           { credentials: 'include' }
         );
+
+        if (handleUnauthorized(response)) {
+          return;
+        }
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -723,8 +727,8 @@ function isLocalPreview() {
       const { pageSize } = syncPageSizeWithViewport();
       const requestPageSize = rankingMode ? RANKING_PAGE_SIZE : pageSize;
       const endpoint = buildApiUrl(appliedQuery
-        ? `/api/songs/search?q=${encodeURIComponent(appliedQuery)}&page=${safePage}&target=${encodeURIComponent(safeTarget)}&pageSize=${requestPageSize}`
-        : `/api/songs/ranking?page=${safePage}&pageSize=${requestPageSize}`);
+        ? `/api/songs-search?q=${encodeURIComponent(appliedQuery)}&page=${safePage}&target=${encodeURIComponent(safeTarget)}&pageSize=${requestPageSize}`
+        : `/api/songs-ranking?page=${safePage}&pageSize=${requestPageSize}`);
 
       songList.textContent = 'Loading...';
 
@@ -732,6 +736,10 @@ function isLocalPreview() {
         const response = await fetch(endpoint, {
           credentials: 'include'
         });
+
+        if (handleUnauthorized(response)) {
+          return;
+        }
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);

@@ -6,12 +6,20 @@ function jsonResponse(status, body) {
   };
 }
 
-function badRequest(detail) {
-  return jsonResponse(400, { error: 'BadRequest', detail });
+function badRequest() {
+  return jsonResponse(400, { error: 'BadRequest' });
 }
 
-function notFound(detail) {
-  return jsonResponse(404, { error: 'NotFound', detail });
+function unauthorized() {
+  return jsonResponse(401, { error: 'Unauthorized' });
+}
+
+function notFound() {
+  return jsonResponse(404, { error: 'NotFound' });
+}
+
+function conflict() {
+  return jsonResponse(409, { error: 'Conflict' });
 }
 
 function serverConfigError(detail = 'Missing COSMOS_ENDPOINT or COSMOS_KEY.') {
@@ -28,7 +36,9 @@ function internalServerError(error) {
 module.exports = {
   jsonResponse,
   badRequest,
+  unauthorized,
   notFound,
+  conflict,
   serverConfigError,
   internalServerError
 };

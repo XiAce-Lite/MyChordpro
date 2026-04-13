@@ -1,14 +1,9 @@
 {
-  "responseOverrides": {
-    "401": {
-      "redirect": "/login",
-      "statusCode": 302
-    },
-    "403": {
-      "rewrite": "/403.html"
-    }
-  },
   "routes": [
+    {
+      "route": "/.auth/*",
+      "allowedRoles": ["anonymous"]
+    },
     {
       "route": "/login",
       "redirect": "/.auth/login/aad"
@@ -24,15 +19,15 @@
     },
     {
       "route": "/edit.html",
-      "allowedRoles": ["editor"]
+      "allowedRoles": ["authenticated"]
     },
     {
       "route": "/edit/*",
-      "allowedRoles": ["editor"]
+      "allowedRoles": ["authenticated"]
     },
     {
-      "route": "/api/edit/*",
-      "allowedRoles": ["editor"]
+      "route": "/api/*",
+      "allowedRoles": ["authenticated"]
     },
     {
       "route": "/song.html",
@@ -46,5 +41,10 @@
       "route": "/",
       "allowedRoles": ["authenticated"]
     }
-  ]
+  ],
+  "responseOverrides": {
+    "403": {
+      "rewrite": "/403.html"
+    }
+  }
 }

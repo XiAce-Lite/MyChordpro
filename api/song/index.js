@@ -1,20 +1,27 @@
 const { getContainer } = require('../shared/cosmos');
 const {
   badRequest,
+  unauthorized,
   notFound,
   serverConfigError,
   internalServerError,
   jsonResponse
 } = require('../shared/http');
+const { getOwnerId } = require('../shared/auth');
 
 const container = getContainer();
 
 module.exports = async function (context, req) {
-  const artist = String(req.query?.artist || context.bindingData.artist || '').trim();
   const id = String(req.query?.id || context.bindingData.id || '').trim();
+  const ownerId = getOwnerId(req);
 
-  if (!artist || !id) {
-    context.res = badRequest('artist and id are required.');
+  if (!id) {
+    context.res = badRequest();
+    return;
+  }
+
+  if (!ownerId) {
+    context.res = unauthorized();
     return;
   }
 
@@ -24,15 +31,20 @@ module.exports = async function (context, req) {
   }
 
   try {
-    const { resource: item } = await container.item(id, artist).read();
+    const { resource: item } = await container.item(id, ownerId).read();
 
     if (!item) {
-      context.res = notFound('Song not found.');
+      context.res = notFound();
       return;
     }
 
     context.res = jsonResponse(200, item);
   } catch (error) {
+    if (error.code === 404) {
+      context.res = notFound();
+      return;
+    }
+
     context.log.error(error);
     context.res = internalServerError(error);
   }

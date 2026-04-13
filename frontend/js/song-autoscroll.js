@@ -1030,6 +1030,10 @@ async function handleDeleteSong() {
       }
     );
 
+    if (window.ChordWikiApiUtils?.handleUnauthorized?.(response)) {
+      return;
+    }
+
     const body = await parseJsonResponse(response);
     if (!response.ok) {
       const detail = getErrorDetail(body, '削除に失敗しました。');

@@ -1,33 +1,29 @@
 const { getContainer } = require('../shared/cosmos');
 const {
-  badRequest: buildBadRequest,
-  notFound: buildNotFound,
+  badRequest,
+  unauthorized,
+  notFound,
+  conflict,
   serverConfigError,
   internalServerError,
   jsonResponse
 } = require('../shared/http');
 const { normalizeSongBody } = require('../shared/validation');
+const { getOwnerId } = require('../shared/auth');
 
 const container = getContainer();
 
-function badRequest(context, detail) {
-  context.res = buildBadRequest(detail);
-}
-
-function notFound(context, detail) {
-  context.res = buildNotFound(detail);
-}
-
-async function handleCreate(context, req) {
+async function handleCreate(context, req, ownerId) {
   const parsed = normalizeSongBody(req.body, { requireId: true });
   if (parsed.error) {
-    badRequest(context, parsed.error);
+    context.res = badRequest();
     return;
   }
 
   const now = new Date().toISOString();
   const item = {
     ...parsed.value,
+    ownerId,
     createdAt: now,
     updatedAt: now,
     score: 0,
@@ -35,14 +31,23 @@ async function handleCreate(context, req) {
   };
 
   try {
-    const { resource } = await container.items.create(item, { partitionKey: item.artist });
+    const { resource: existing } = await container.item(item.id, ownerId).read();
+    if (existing) {
+      context.res = conflict();
+      return;
+    }
+  } catch (error) {
+    if (error.code !== 404) {
+      throw error;
+    }
+  }
+
+  try {
+    const { resource } = await container.items.create(item, { partitionKey: ownerId });
     context.res = { status: 201, body: resource };
   } catch (error) {
     if (error.code === 409) {
-      context.res = {
-        status: 409,
-        body: { error: "Conflict", detail: "Item already exists (id conflict within partition)." }
-      };
+      context.res = conflict();
       return;
     }
 
@@ -50,9 +55,9 @@ async function handleCreate(context, req) {
   }
 }
 
-async function readExistingSong(originalArtist, originalId) {
+async function readExistingSong(originalId, ownerId) {
   try {
-    const response = await container.item(originalId, originalArtist).read();
+    const response = await container.item(originalId, ownerId).read();
     return response.resource || null;
   } catch (error) {
     if (error.code === 404) {
@@ -63,30 +68,29 @@ async function readExistingSong(originalArtist, originalId) {
   }
 }
 
-async function handleUpdate(context, req) {
-  const originalArtist = String(req.query?.artist || context.bindingData.artist || "").trim();
-  const originalId = String(req.query?.id || context.bindingData.id || "").trim();
+async function handleUpdate(context, req, ownerId) {
+  const originalId = String(req.query?.id || context.bindingData.id || '').trim();
 
-  if (!originalArtist || !originalId) {
-    badRequest(context, "artist and id route parameters are required for update.");
+  if (!originalId) {
+    context.res = badRequest();
     return;
   }
 
   const parsed = normalizeSongBody(req.body, { fallbackId: originalId, requireId: false });
   if (parsed.error) {
-    badRequest(context, parsed.error);
+    context.res = badRequest();
     return;
   }
 
   const nextItem = parsed.value;
   if (nextItem.id && nextItem.id !== originalId) {
-    badRequest(context, "id cannot be changed in edit mode.");
+    context.res = badRequest();
     return;
   }
 
-  const existing = await readExistingSong(originalArtist, originalId);
+  const existing = await readExistingSong(originalId, ownerId);
   if (!existing) {
-    notFound(context, "Song not found.");
+    context.res = notFound();
     return;
   }
 
@@ -95,38 +99,34 @@ async function handleUpdate(context, req) {
     ...existing,
     ...nextItem,
     id: originalId,
+    ownerId,
     createdAt: existing.createdAt || nextItem.createdAt || now,
     updatedAt: now
   };
 
-  const { resource } = await container.items.upsert(updatedItem, { partitionKey: updatedItem.artist });
-
-  if (updatedItem.artist !== originalArtist) {
-    await container.item(originalId, originalArtist).delete();
-  }
+  const { resource } = await container.item(originalId, ownerId).replace(updatedItem);
 
   context.res = { status: 200, body: resource };
 }
 
-async function handleDelete(context, req) {
-  const originalArtist = String(req.query?.artist || context.bindingData.artist || "").trim();
-  const originalId = String(req.query?.id || context.bindingData.id || "").trim();
+async function handleDelete(context, req, ownerId) {
+  const originalId = String(req.query?.id || context.bindingData.id || '').trim();
 
-  if (!originalArtist || !originalId) {
-    badRequest(context, "artist and id route parameters are required for delete.");
+  if (!originalId) {
+    context.res = badRequest();
     return;
   }
 
-  const existing = await readExistingSong(originalArtist, originalId);
+  const existing = await readExistingSong(originalId, ownerId);
   if (!existing) {
-    notFound(context, "Song not found.");
+    context.res = notFound();
     return;
   }
 
-  await container.item(originalId, originalArtist).delete();
+  await container.item(originalId, ownerId).delete();
   context.res = {
     status: 200,
-    body: { ok: true, id: originalId, artist: originalArtist }
+    body: { ok: true, id: originalId }
   };
 }
 
@@ -137,24 +137,30 @@ module.exports = async function (context, req) {
       return;
     }
 
-    const method = String(req.method || "").toUpperCase();
-
-    if (method === "POST") {
-      await handleCreate(context, req);
+    const ownerId = getOwnerId(req);
+    if (!ownerId) {
+      context.res = unauthorized();
       return;
     }
 
-    if (method === "PUT") {
-      await handleUpdate(context, req);
+    const method = String(req.method || '').toUpperCase();
+
+    if (method === 'POST') {
+      await handleCreate(context, req, ownerId);
       return;
     }
 
-    if (method === "DELETE") {
-      await handleDelete(context, req);
+    if (method === 'PUT') {
+      await handleUpdate(context, req, ownerId);
       return;
     }
 
-    context.res = jsonResponse(405, { error: "MethodNotAllowed", detail: `Unsupported method: ${method}` });
+    if (method === 'DELETE') {
+      await handleDelete(context, req, ownerId);
+      return;
+    }
+
+    context.res = jsonResponse(405, { error: 'MethodNotAllowed', detail: `Unsupported method: ${method}` });
   } catch (error) {
     context.log.error(error);
     context.res = internalServerError(error);

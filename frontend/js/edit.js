@@ -32,7 +32,8 @@ const {
   buildApiUrl,
   buildSongApiUrl,
   buildEditSongApiUrl,
-  buildSongUrl
+  buildSongUrl,
+  handleUnauthorized
 } = window.ChordWikiApiUtils;
 const {
   normalizeTextBlock,
@@ -76,7 +77,7 @@ function setFormDisabled(disabled) {
 function updatePageMeta() {
   const isEdit = state.mode === 'edit';
 
-  document.title = isEdit ? 'ChordWiki - Edit Song' : 'ChordWiki - Add Song';
+  document.title = isEdit ? 'MyChordpro - Edit Song' : 'MyChordpro - Add Song';
   pageTitleEl.textContent = isEdit ? 'コード譜編集' : 'コード譜の新規追加';
   pageDescriptionEl.textContent = isEdit
     ? '既存の曲データを読み込み、内容を更新します。ID は固定です。'
@@ -125,6 +126,10 @@ async function loadSongForEdit() {
       buildSongApiUrl(state.originalArtist, state.originalId),
       { credentials: 'include' }
     );
+
+    if (handleUnauthorized(response)) {
+      return;
+    }
 
     const body = await response.json().catch(() => null);
 
@@ -180,6 +185,10 @@ async function handleDelete() {
         credentials: 'include'
       }
     );
+
+    if (handleUnauthorized(response)) {
+      return;
+    }
 
     const body = await response.json().catch(() => null);
 
@@ -244,7 +253,7 @@ async function handleSubmit(event) {
   const isEdit = state.mode === 'edit';
   const endpoint = isEdit
     ? buildEditSongApiUrl(state.originalArtist, state.originalId)
-    : buildApiUrl('/api/edit/song');
+    : buildApiUrl('/api/edit-song');
 
   state.isSubmitting = true;
   setFormDisabled(true);
@@ -259,6 +268,10 @@ async function handleSubmit(event) {
       credentials: 'include',
       body: JSON.stringify(payload)
     });
+
+    if (handleUnauthorized(response)) {
+      return;
+    }
 
     const body = await response.json().catch(() => null);
 

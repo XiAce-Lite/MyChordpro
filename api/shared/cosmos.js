@@ -2,8 +2,8 @@ const { CosmosClient } = require('@azure/cosmos');
 
 const endpoint = process.env.COSMOS_ENDPOINT;
 const key = process.env.COSMOS_KEY;
-const databaseId = process.env.COSMOS_DB_NAME || 'ChordWiki';
-const containerId = process.env.COSMOS_DB_CONTAINER || 'Songs';
+const databaseId = process.env.COSMOS_DATABASE || process.env.COSMOS_DB_NAME || 'MyChordpro';
+const containerId = process.env.COSMOS_CONTAINER || process.env.COSMOS_DB_CONTAINER || 'Songs';
 
 let client = null;
 

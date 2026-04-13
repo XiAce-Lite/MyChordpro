@@ -2,10 +2,12 @@ const { getContainer } = require('../shared/cosmos');
 const {
   jsonResponse,
   badRequest,
+  unauthorized,
   notFound,
-  serverConfigError
+  serverConfigError,
+  internalServerError
 } = require('../shared/http');
-const { parseArtistBody } = require('../shared/validation');
+const { getOwnerId } = require('../shared/auth');
 
 const container = getContainer();
 
@@ -19,37 +21,30 @@ function normalizeScore(value) {
 }
 
 module.exports = async function (context, req) {
+  const ownerId = getOwnerId(req);
+
+  if (!ownerId) {
+    context.res = unauthorized();
+    return;
+  }
+
   if (!container) {
     context.res = serverConfigError();
     return;
   }
 
-  const id = String(context.bindingData.id || "").trim();
+  const id = String(context.bindingData.id || req.query?.id || '').trim();
   if (!id) {
-    context.res = jsonResponse(400, {
-      error: "BadRequest",
-      detail: "id route parameter is required."
-    });
+    context.res = badRequest();
     return;
   }
-
-  const parsed = parseArtistBody(req.body);
-  if (parsed.error) {
-    context.res = badRequest(parsed.error);
-    return;
-  }
-
-  const { artist } = parsed;
 
   try {
-    const itemRef = container.item(id, artist);
+    const itemRef = container.item(id, ownerId);
     const { resource: song } = await itemRef.read();
 
     if (!song) {
-      context.res = jsonResponse(404, {
-        error: "NotFound",
-        detail: "Song not found."
-      });
+      context.res = notFound();
       return;
     }
 
@@ -72,17 +67,11 @@ module.exports = async function (context, req) {
     });
   } catch (error) {
     if (error.code === 404) {
-      context.res = jsonResponse(404, {
-        error: "NotFound",
-        detail: "Song not found."
-      });
+      context.res = notFound();
       return;
     }
 
-    context.log.error("Failed to update song view score:", error);
-    context.res = jsonResponse(500, {
-      error: "InternalServerError",
-      detail: String(error.message || error)
-    });
+    context.log.error('Failed to update song view score:', error);
+    context.res = internalServerError(error);
   }
 };

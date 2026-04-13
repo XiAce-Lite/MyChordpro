@@ -6,7 +6,7 @@
       "direction": "in",
       "name": "req",
       "methods": ["get"],
-      "route": "songs/ranking"
+      "route": "songs-ranking"
     },
     {
       "type": "http",

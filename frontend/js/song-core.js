@@ -1369,13 +1369,15 @@ function trackSongView(artist, id) {
     return;
   }
 
-  fetch(buildApiUrl(`/api/songs/${encodeURIComponent(id)}/view`), {
+  fetch(buildApiUrl(`/api/songs-view/${encodeURIComponent(id)}`), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ artist })
+    credentials: 'include'
   })
     .then(async (response) => {
+      if (window.ChordWikiApiUtils?.handleUnauthorized?.(response)) {
+        return;
+      }
+
       if (response.ok) {
         return;
       }

@@ -6,8 +6,7 @@ const {
   ANNOTATION_SECTION_COLLAPSED_STORAGE_KEY,
   INK_TOOLBAR_COLLAPSED_STORAGE_KEY,
   INK_COLOR_STORAGE_KEY,
-  INK_WIDTH_STORAGE_KEY,
-  buildSongScopedKey
+  INK_WIDTH_STORAGE_KEY
 } = window.ChordWikiStorageKeys;
 const DEFAULT_NOTE_W = 240;
 const DEFAULT_NOTE_H = 180;
@@ -54,11 +53,11 @@ function getSongAnnotationIdentity({ artist, id } = {}) {
 }
 
 function getStickyNotesStorageKey(artist = '', id = '') {
-  return buildSongScopedKey(STICKY_NOTES_STORAGE_PREFIX, artist, id);
+  return window.ChordWikiStorageKeys.buildSongScopedKey(STICKY_NOTES_STORAGE_PREFIX, artist, id);
 }
 
 function getInkStorageKey(artist = '', id = '') {
-  return buildSongScopedKey(INK_STORAGE_PREFIX, artist, id);
+  return window.ChordWikiStorageKeys.buildSongScopedKey(INK_STORAGE_PREFIX, artist, id);
 }
 
 function persistInkToolPreferences() {

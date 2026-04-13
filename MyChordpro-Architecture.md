@@ -1,4 +1,4 @@
-# 個人用 ChordWiki 設計書
+# 個人用 MyChordpro 設計書
 
 ---
 
@@ -18,12 +18,13 @@
 
 #### 閲覧機能
 
-- Microsoft アカウント認証後にトップページへアクセスできること
+- GitHub 認証後にトップページへアクセスできること
 - トップページでは **ランキング表示** を標準とし、以下の順で表示すること
   - `display_score` 降順
   - `last_viewed_at` 降順
 - `display_score` は保存済み `score` に対して **7 日ごとの減衰**を適用した派生値とし、古い閲覧履歴が自然に下がること
 - 一覧は **画面の縦解像度に応じて 20～60 件 / ページで自動調整**し、最大 6 ページ分まで扱えること
+- ランキング表示はフロント側で `20 件 / ページ`、`最大 100 件（5 ページ）` の上限制御を行うこと
 - ページネーションは実在するページ数だけを表示し、トップページでは固定フッターで操作できること
 - 検索はトップページから以下を提供すること
   - `target=song`：タイトル / アーティスト検索
@@ -57,7 +58,8 @@
 
 #### 編集機能
 
-- `editor` ロールのみが新規登録・更新・削除できること
+- ログインユーザーのみが新規登録・更新・削除できること
+- データは `ownerId` 単位で分離され、他ユーザーの曲は参照・更新できないこと
 - 編集画面では以下を管理できること
   - `id`（edit 時は固定）
   - `title`
@@ -85,7 +87,7 @@
 
 ### 1.2 非機能要件
 
-- 限定公開（Microsoft Entra ID / Static Web Apps 認証）
+- 限定公開（GitHub / Static Web Apps 認証）
 - 権限制御（閲覧と編集の分離）
 - Free/低コスト枠を中心とした運用
 - クライアント・API のいずれかが失敗しても閲覧体験を大きく壊さないこと
@@ -96,11 +98,11 @@
 ## 2. 全体アーキテクチャ
 
 [ Browser ]  
-↓（Microsoft 認証 / `.auth`）  
+↓（GitHub 認証 / `.auth`）  
 [ Azure Static Web Apps ]  
 
 - Frontend（HTML / CSS / JavaScript）
-- ロール制御（`authenticated` / `editor`）
+- ルート制御（主に `authenticated`）
 - API ルーティング
 
 ↓ `/api/*`  
@@ -130,13 +132,12 @@
 ### 3.1 Azure Static Web Apps（Free）
 
 - フロントエンド配信
-- Microsoft Entra ID 認証
+- GitHub 認証
 - `/login` / `/logout` の簡易導線
 - API ゲートウェイとして Azure Functions を内包
-- ロール
+- ルート制御
 
-  - `authenticated`：閲覧可
-  - `editor`：編集可
+  - `authenticated`：トップ / 曲ページ / 編集画面 / API へアクセス可
 
 ### 3.2 Azure Functions
 
@@ -148,14 +149,14 @@
 
   - `COSMOS_ENDPOINT`
   - `COSMOS_KEY`
-  - `COSMOS_DB_NAME`（既定値: `ChordWiki`）
-  - `COSMOS_DB_CONTAINER`（既定値: `Songs`）
+  - `COSMOS_DATABASE` または `COSMOS_DB_NAME`（既定値: `MyChordpro`）
+  - `COSMOS_CONTAINER` または `COSMOS_DB_CONTAINER`（既定値: `Songs`）
 
 ### 3.3 Azure Cosmos DB（Core SQL / Free Tier 想定）
 
-- Database：`ChordWiki`
+- Database：`MyChordpro`（既定値）
 - Container：`Songs`
-- Partition Key：`/artist`
+- Partition Key：`/ownerId`
 - 曲 1 件 = 1 ドキュメント
 - ランキングに必要な `score` / `last_viewed_at` を同一ドキュメント内で管理する
 
@@ -166,31 +167,32 @@
 ### 4.1 認証フロー
 
 1. 未ログインで保護ページへアクセス
-2. Static Web Apps が `/login` → `/.auth/login/aad` へ誘導
+2. Static Web Apps が `/login` → `/.auth/login/github` へ誘導
 3. サインイン後、`authenticated` ロールで閲覧可能
-4. オーナーアカウントには追加で `editor` ロールを付与し、編集 UI を表示
+4. API は `x-ms-client-principal` の `userId` を `ownerId` として使用し、ユーザーごとにデータ分離する
 
 ### 4.2 ロール付与
 
-- オーナー：`editor`
-- 一般閲覧者：`authenticated`
+- 基本ロール：`authenticated`
+- 画面上の `editor-only` 要素は、`/.auth/me` の `userId` 有無をもとに表示制御する
 
 ### 4.3 ルーティング制御（`frontend/staticwebapp.config.json`）
 
 | ルート | 実効ロール | 用途 |
 | --- | --- | --- |
+| `/.auth/*` | `anonymous`, `authenticated` | 認証関連エンドポイント |
 | `/` | `authenticated` | トップページ |
 | `/song.html`, `/song/*` | `authenticated` | 曲詳細表示 |
 | `/add.html` | 公開（302 リダイレクト） | `/edit.html?mode=add` へ誘導 |
-| `/edit.html`, `/edit/*` | `editor` | 登録・編集画面 |
-| `/api/edit/*` | `editor` | 更新・削除 API |
-| `/login` | 公開 | `/.auth/login/aad` へリダイレクト |
+| `/edit.html`, `/edit/*` | `authenticated` | 登録・編集画面 |
+| `/api/*` | `authenticated` | API 全体 |
+| `/login` | 公開 | `/.auth/login/github` へリダイレクト |
 | `/logout` | 公開 | `/.auth/logout` へリダイレクト |
 
 ### 4.4 フロントエンドの権限反映
 
 - `frontend/js/auth.js` で `/.auth/me` を参照し、`editor-only` 要素の表示/非表示を切り替える
-- これにより、同じ HTML を `authenticated` / `editor` で出し分ける
+- 現在の実装ではロール名ではなく `clientPrincipal.userId` の有無で UI 表示を制御する
 
 ---
 
@@ -201,9 +203,10 @@
 | フィールド | 型 | 必須 | 説明 |
 | --- | --- | ---: | --- |
 | `id` | string | ○ | 一意 ID |
+| `ownerId` | string | ○ | ユーザー識別子（Partition Key） |
 | `slug` | string | ○ | URL 用 ID |
 | `title` | string | ○ | 曲名 |
-| `artist` | string | ○ | アーティスト名 / Partition Key |
+| `artist` | string | ○ | アーティスト名 |
 | `tags` | string[] | - | タグ一覧 |
 | `youtube` | object[] | - | YouTube ID と開始秒 |
 | `chordPro` | string | ○ | コード譜本文 |
@@ -257,17 +260,17 @@
 | Method | Route | 実効ロール | 用途 |
 | --- | --- | --- | --- |
 | GET | `/api/songs` | authenticated | 最小一覧 |
-| GET | `/api/songs/ranking` | authenticated | ランキング |
-| GET | `/api/songs/search` | authenticated | 曲検索 / タグ検索 |
+| GET | `/api/songs-ranking` | authenticated | ランキング |
+| GET | `/api/songs-search` | authenticated | 曲検索 / タグ検索 |
 | GET | `/api/song` | authenticated | 曲詳細取得 |
-| POST | `/api/songs/{id}/view` | authenticated | 閲覧スコア更新 |
-| POST / PUT / DELETE | `/api/edit/song` | editor | 作成 / 更新 / 削除 |
+| POST | `/api/songs-view/{id?}` | authenticated | 閲覧スコア更新 |
+| POST / PUT / DELETE | `/api/edit-song` | authenticated | 作成 / 更新 / 削除 |
 | GET | `/api/youtube/search-duration` | authenticated | 参考時間推定 |
 
 ### 6.2 曲取得 API
 
-- `GET /api/song?artist=...&id=...`
-- Cosmos DB の `id + partitionKey(artist)` で Point Read
+- `GET /api/song?id=...`
+- Cosmos DB の `id + partitionKey(ownerId)` で Point Read
 - 見つからない場合は `404`
 - フロント側は `buildApiUrl()` を介し、
   本番とローカルで同じ呼び出し形を使う
@@ -279,7 +282,7 @@
 - `id / artist / title / slug` の最小情報だけを返す
 - クロスパーティションクエリを使う
 
-#### `GET /api/songs/ranking`
+#### `GET /api/songs-ranking`
 
 - `display_score DESC` → `last_viewed_at DESC` でソート
 - `display_score = max(score - floor(elapsedDays / 7), 0)`
@@ -288,10 +291,11 @@
 - 返却対象は **最大 6 ページ分**に制限する
 - レスポンスには `songs`, `page`, `pageSize`,
   `totalSongs`, `totalPages`, `totalLimit` を含む
+- `totalPages` は API 実装上 `6` 固定値で返す
 
 ### 6.4 検索 API
 
-- `GET /api/songs/search?q=...&target=song|tag&page=n&pageSize=m`
+- `GET /api/songs-search?q=...&target=song|tag&page=n&pageSize=m`
 - `target=song`（既定）では `title` と `artist` を検索する
 - `target=tag` では `tags` 配列を検索する
 - `q="..."` の場合は完全一致（`target=song` 時）
@@ -302,8 +306,8 @@
 
 ### 6.5 閲覧スコア更新 API
 
-- `POST /api/songs/{id}/view`
-- リクエスト body で `artist` を受け取る
+- `POST /api/songs-view/{id?}`
+- 対象曲はパスまたはクエリの `id` で指定する
 - 曲ページ表示後に非同期呼び出しし、閲覧体験はブロックしない
 - 更新内容
 
@@ -315,20 +319,18 @@
 
 ### 6.6 編集 API
 
-- `POST /api/edit/song`
+- `POST /api/edit-song`
 
   - 新規作成
   - `createdAt` / `updatedAt` / `score=0` /
     `last_viewed_at=null` をサーバーで初期化
 
-- `PUT /api/edit/song?artist=...&id=...`
+- `PUT /api/edit-song?id=...`
 
   - 既存曲の更新
   - `id` は edit 時に変更不可
-  - `artist` を変更した場合は、新パーティションに upsert 後、
-    旧パーティションから削除
 
-- `DELETE /api/edit/song?artist=...&id=...`
+- `DELETE /api/edit-song?id=...`
 
   - 既存曲を削除
 
@@ -382,9 +384,9 @@
 - ヘッダーは固定表示、ページネーションは固定フッター表示とし、
   縦解像度に応じて `pageSize` を自動調整する
 - ページボタンは **実在するページ数だけ** を表示する
-- `ChordWiki Personal` タイトルと `✕ クリア` から
+- `MyChordpro` タイトルと `✕ クリア` から
   ランキング初期表示へ戻れる
-- `editor` ロール時のみ「新規追加」ボタンを表示する
+- `editor-only` 要素として「新規追加」ボタンを表示する（実装上は `userId` 有無で表示切替）
 - ローカルプレビュー時は `runtime-config.js` により
   `http://localhost:7071` を自動参照し、API が使えない場合は
   `.local/local-test-songs.js` へフォールバックする
@@ -484,11 +486,10 @@
 | `transposeNotationCollapsed` | `移調 / 表記` ブロックの折りたたみ状態 |
 | `annotationSectionCollapsed` | `メモ / 手書き` ブロックの折りたたみ状態 |
 | `autoscrollSectionCollapsed` | `オートスクロール` ブロックの折りたたみ状態 |
-| `displayPrefsCollapsed` | `表示カスタマイズ` ブロックの折りたたみ状態 |
-| `songExtrasCollapsed` | `Tags / YouTube` パネルの折りたたみ状態 |
 | `songExtrasCollapsed` | Tags / YouTube パネルの折りたたみ状態 |
 | `displayPrefs:v1` | 表示カスタマイズ設定 |
 | `displayPrefsCollapsed` | 表示カスタマイズパネルの折りたたみ状態 |
+| `inkToolbarCollapsed` | 手書きフロート UI の折りたたみ状態 |
 | `chordwiki:apiOrigin` | ローカル検証時の API 接続先 override |
 
 ### 7.6 ChordPro → HTML 変換（`frontend/js/chordwiki-render.js`）
@@ -506,7 +507,7 @@
 
 - クライアントサイドのみで描画する
 - 未対応記法は無視し、表示全体を壊さない
-- ChordWiki 互換を意識し、`p.line`, `p.comment`, `span.chord`,
+- ChordPro ビューア互換を意識し、`p.line`, `p.comment`, `span.chord`,
   `span.word`, `span.wordtop` を中心に整形する
 
 ---
@@ -535,7 +536,8 @@
 
 - Cosmos DB の Primary Key を変更した場合は、
   SWA / Functions のアプリ設定も更新すること
-- 環境変数名は `COSMOS_ENDPOINT` / `COSMOS_KEY` に統一する
+- 環境変数名は `COSMOS_ENDPOINT` / `COSMOS_KEY` を必須とし、
+  DB/Container は `COSMOS_DATABASE` / `COSMOS_CONTAINER`（または互換名）を使用する
 
 ---
 

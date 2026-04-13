@@ -2,7 +2,7 @@
   "routes": [
     {
       "route": "/.auth/*",
-      "allowedRoles": ["anonymous"]
+      "allowedRoles": ["anonymous", "authenticated"]
     },
     {
       "route": "/login",

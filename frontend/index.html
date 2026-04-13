@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChordWiki Personal</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="/favicon-dark.svg" type="image/svg+xml" sizes="any" media="(prefers-color-scheme: dark)">
+  <link rel="stylesheet" href="css/index.css?v=20260410-refactor1">
+</head>
+<body>
+  <header class="top-header">
+    <div class="top-header-inner">
+      <h1 class="page-title">
+        <a id="home-link" class="home-link" href="/">
+          <img src="/site-logo.svg" alt="" class="site-logo" width="36" height="36" aria-hidden="true">
+          <span>ChordWiki Personal</span>
+        </a>
+      </h1>
+      <div class="search-panel">
+        <form id="search-form" class="search-form">
+          <select id="search-target" aria-label="検索対象">
+            <option value="song">曲名 / アーティスト</option>
+            <option value="tag">タグ</option>
+          </select>
+          <div class="search-input-wrap">
+            <input type="text" id="search" placeholder="1ワード検索（対象は曲名とアーティスト）" title="1ワード検索のみ対応。AND/OR検索はしません。ダブルコーテーションで括ると完全一致検索します。">
+            <div id="search-suggest" class="search-suggest" hidden></div>
+          </div>
+          <button type="submit" id="search-button">検索</button>
+        </form>
+      </div>
+      <div id="search-state" class="search-state" hidden>
+        <span id="search-state-text" class="search-state-text"></span>
+        <button id="search-clear" class="search-clear" type="button">✕ クリア</button>
+      </div>
+      <button id="add-button" class="editor-only" data-display="inline-block" style="padding:8px 14px;font-size:14px;border:none;border-radius:8px;background-color:#0078d4;color:#fff;cursor:pointer;white-space:nowrap;">新規追加</button>
+    </div>
+  </header>
+  <main class="page-content">
+    <p id="search-help" class="search-help">※ 曲名 / アーティスト検索は 1ワードのみ対応します。半角スペースで区切っても AND/OR 検索はしません。<code>"..."</code> で完全一致です。タグ検索はセレクトで切り替え、完全一致で実行します。</p>
+    <section id="local-sample-panel" class="local-sample-panel" hidden>
+      <div class="local-sample-title">ローカルサンプル曲</div>
+      <div id="local-sample-links" class="local-sample-links"></div>
+    </section>
+    <div id="song-list"></div>
+  </main>
+  <div id="pagination" aria-label="Ranking pages"></div>
+
+  <script src="js/runtime-config.js?v=20260410-refactor1"></script>
+  <script src="js/shared/api.js?v=20260410-refactor1"></script>
+  <script src="js/auth.js?v=20260410-refactor1"></script>
+  <script src="js/index.js?v=20260410-refactor1"></script>
+</body>
+</html>

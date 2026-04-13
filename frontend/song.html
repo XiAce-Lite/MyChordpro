@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChordWiki - Song</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" media="(prefers-color-scheme: light)" />
+  <link rel="icon" href="/favicon-dark.svg" type="image/svg+xml" sizes="any" media="(prefers-color-scheme: dark)" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@0..1" />
+  <link rel="stylesheet" href="css/chordwiki-song.css?v=20260412-annotations3" />
+</head>
+<body>
+  <div class="container">
+    <div class="song-header">
+      <a href="/" class="back-link">← Top</a>
+      <h1 id="title" class="song-title"></h1>
+      <div id="song-admin-actions" class="song-admin-actions editor-only" data-display="flex">
+        <a id="edit-link" class="edit-link" href="#">Edit</a>
+        <button id="delete-button" type="button" class="delete-link">Delete</button>
+      </div>
+    </div>
+
+    <div id="artist" class="song-artist"></div>
+
+    <div class="song-layout">
+      <div class="song-main-column">
+        <div class="sheet-stage">
+          <div id="key" class="song-key"></div>
+          <div id="sheet" class="cw-sheet"></div>
+          <div id="autoscroll-marker-layer" class="autoscroll-marker-layer" aria-hidden="true"></div>
+        </div>
+        <div class="song-bottom-nav">
+          <a href="/" class="back-link back-link-bottom">← Top</a>
+        </div>
+      </div>
+
+      <div class="song-side-column">
+        <div id="autoscroll-ui" class="autoscroll-ui" aria-label="Song controls">
+          <div class="autoscroll-header">
+            <div class="autoscroll-header-main">
+              <div class="autoscroll-title">Song Controls</div>
+              <div id="autoscroll-status" class="autoscroll-status" aria-live="polite">Stopped</div>
+            </div>
+            <button id="autoscroll-collapse-toggle" class="autoscroll-collapse-toggle" type="button" aria-expanded="true" aria-label="Collapse song controls">≫</button>
+          </div>
+
+        <section id="transpose-notation-section" class="control-section" aria-labelledby="transpose-notation-section-title">
+          <div class="control-section-heading">
+            <div id="transpose-notation-section-title" class="control-section-title">移調</div>
+            <button id="transpose-notation-collapse-toggle" class="section-collapse-toggle" type="button" aria-expanded="true" aria-label="Collapse transpose and notation">▼</button>
+          </div>
+
+          <div id="transpose-notation-detail" class="transpose-notation-detail">
+            <div class="subcontrol-block" aria-label="移調">
+              <div id="transpose-ui" class="transpose-ui">
+                <div class="transpose-buttons">
+                  <button id="transpose-down" type="button">-</button>
+                  <span id="transpose-display">Transpose: 0</span>
+                  <button id="transpose-up" type="button">+</button>
+                  <button id="transpose-reset" type="button">↺ Reset</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="subcontrol-block" aria-labelledby="notation-section-title">
+              <div id="notation-section-title" class="control-section-title">表記</div>
+              <fieldset class="transpose-mode" aria-label="Accidental display mode">
+                <legend class="sr-only">Accidental display mode</legend>
+                <label class="transpose-mode-option">
+                  <input type="radio" name="accidental-mode" value="sharp" />
+                  <span>♯</span>
+                </label>
+                <label class="transpose-mode-option">
+                  <input type="radio" name="accidental-mode" value="none" checked />
+                  <span>指定なし</span>
+                </label>
+                <label class="transpose-mode-option">
+                  <input type="radio" name="accidental-mode" value="flat" />
+                  <span>♭</span>
+                </label>
+              </fieldset>
+            </div>
+          </div>
+        </section>
+
+        <section id="annotation-section" class="control-section" aria-labelledby="annotation-section-title">
+          <div class="control-section-heading">
+            <div id="annotation-section-title" class="control-section-title">メモ</div>
+            <button id="annotation-section-collapse-toggle" class="section-collapse-toggle" type="button" aria-expanded="true" aria-label="Collapse memo tools">▼</button>
+          </div>
+          <div id="annotation-detail" class="annotation-toolbar">
+            <div class="annotation-controls-row" aria-label="メモ controls">
+              <button id="sticky-note-add-button" type="button" class="annotation-primary-button">📝 Memo</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="autoscroll-section" class="control-section" aria-labelledby="autoscroll-section-title">
+          <div class="control-section-heading">
+            <div id="autoscroll-section-title" class="control-section-title">オートスクロール</div>
+            <button id="autoscroll-section-collapse-toggle" class="section-collapse-toggle" type="button" aria-expanded="true" aria-label="Collapse auto-scroll settings">▼</button>
+          </div>
+
+          <div id="autoscroll-detail" class="autoscroll-detail">
+            <div class="autoscroll-duration">
+              <label for="autoscroll-minutes">
+                <input id="autoscroll-minutes" type="number" min="0" max="99" step="1" value="4" inputmode="numeric" />
+              </label>
+              <span class="autoscroll-separator">:</span>
+              <label for="autoscroll-seconds" aria-label="Seconds">
+                <input id="autoscroll-seconds" type="number" min="-1" max="60" step="1" value="0" inputmode="numeric" aria-label="Seconds" />
+              </label>
+              <button id="autoscroll-duration-reset" type="button" class="autoscroll-inline-reset" aria-label="Reset auto-scroll time">↺ Time</button>
+            </div>
+
+            <div class="autoscroll-presets" aria-label="Time presets">
+              <button type="button" class="autoscroll-preset" data-minutes="2" data-seconds="30">2:30</button>
+              <button type="button" class="autoscroll-preset" data-minutes="3" data-seconds="0">3:00</button>
+              <button type="button" class="autoscroll-preset" data-minutes="3" data-seconds="30">3:30</button>
+              <button type="button" class="autoscroll-preset" data-minutes="4" data-seconds="0">4:00</button>
+              <button type="button" class="autoscroll-preset" data-minutes="4" data-seconds="30">4:30</button>
+              <button type="button" class="autoscroll-preset" data-minutes="5" data-seconds="0">5:00</button>
+            </div>
+
+            <div class="autoscroll-speed-row" aria-label="Speed controls">
+              <button id="autoscroll-speed-down" type="button" aria-label="Slow down auto-scroll">－</button>
+              <span id="autoscroll-speed-display" class="autoscroll-speed-display" aria-live="polite">1.00x</span>
+              <button id="autoscroll-speed-up" type="button" aria-label="Speed up auto-scroll">＋</button>
+              <button id="autoscroll-speed-reset" type="button" class="autoscroll-inline-reset" aria-label="Reset auto-scroll speed">↺ Speed</button>
+            </div>
+            <div class="autoscroll-speed-hint">再生中はホイール ↑ で遅く / ↓ で速く</div>
+
+            <div class="autoscroll-buttons">
+              <button id="autoscroll-toggle" type="button">Start</button>
+              <button id="autoscroll-markers-reset" type="button">↺ Marker</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="display-custom-section" class="control-section display-custom-section" aria-labelledby="display-section-title">
+          <div class="control-section-heading">
+            <div id="display-section-title" class="control-section-title">表示カスタマイズ</div>
+            <button id="display-custom-collapse-toggle" class="section-collapse-toggle" type="button" aria-expanded="true" aria-label="Collapse display customization">▼</button>
+          </div>
+
+          <div id="display-custom-detail" class="display-custom-detail">
+            <label class="display-toggle-option" for="display-custom-enabled">
+              <input id="display-custom-enabled" type="checkbox" />
+              <span>カスタマイズを有効化</span>
+            </label>
+
+            <div class="display-toggle-option display-toggle-option-with-help">
+              <input id="display-adjust-chordpos" type="checkbox" />
+              <label for="display-adjust-chordpos" class="display-toggle-label">長いコード時の歌詞位置調整</label>
+              <span class="display-help">
+                <button type="button" class="display-help-button" aria-label="長いコード時の歌詞位置調整の説明">?</button>
+                <span class="display-help-tooltip" role="tooltip">テンションノートなどが多いコードの場合、歌詞が大幅に右になる場合に、左に少し詰めます。</span>
+              </span>
+            </div>
+
+            <div class="display-toggle-option display-toggle-option-with-help">
+              <input id="display-mnoto-enabled" type="checkbox" />
+              <label for="display-mnoto-enabled" class="display-toggle-label">MNoto Sans フォント対応</label>
+              <span class="display-help">
+                <button type="button" class="display-help-button" aria-label="MNoto Sans フォント対応の説明">?</button>
+                <span class="display-help-tooltip" role="tooltip">
+                  MNoto Sans V2フォントをインストールしてある環境で、コード表示にそのフォントを使用します。
+                  利用可否は現在のブラウザで自動判定します。
+                  <a href="https://github.com/ykwe/MNoto-Sans-alpha" target="_blank" rel="noopener noreferrer">ダウンロードはこちら</a>
+                </span>
+              </span>
+            </div>
+            <div id="display-mnoto-status" class="display-inline-note" aria-live="polite"></div>
+
+            <label class="display-toggle-option" for="display-lyric-weight">
+              <input id="display-lyric-weight" type="checkbox" />
+              <span>歌詞行太字</span>
+            </label>
+
+            <label class="display-toggle-option" for="display-comment-weight">
+              <input id="display-comment-weight" type="checkbox" />
+              <span>コメント行太字</span>
+            </label>
+
+            <div class="display-number-grid">
+              <label for="display-chord-font-size">記号サイズ(px)</label>
+              <input id="display-chord-font-size" type="number" min="6" max="18" step="1" value="14" inputmode="numeric" />
+
+              <label for="display-chord-offset">記号縦位置(px)</label>
+              <input id="display-chord-offset" type="number" min="-3" max="10" step="1" value="7" inputmode="numeric" />
+
+              <label for="display-lyric-gap">歌詞行の間隔(px)</label>
+              <input id="display-lyric-gap" type="number" min="8" max="32" step="1" value="15" inputmode="numeric" />
+
+              <label for="display-comment-gap">コメント行の間隔(px)</label>
+              <input id="display-comment-gap" type="number" min="8" max="32" step="1" value="16" inputmode="numeric" />
+            </div>
+          </div>
+        </section>
+        </div>
+
+        <div id="ink-floating-ui" class="ink-floating-ui is-collapsed" aria-label="手書き controls">
+          <div class="ink-floating-controls-row" aria-label="手書き controls">
+            <button id="ink-mode-toggle" type="button" class="annotation-icon-button" aria-pressed="false" aria-expanded="false" aria-label="手書きモードを開始">
+              <span class="material-symbols-outlined" aria-hidden="true">draw</span>
+            </button>
+            <button id="ink-pin-toggle" type="button" class="annotation-icon-button ink-secondary-control" aria-pressed="true" aria-label="新しい手書き線は譜面固定">
+              <span class="material-symbols-outlined" aria-hidden="true">push_pin</span>
+            </button>
+            <div class="ink-popover-anchor">
+              <button id="ink-width-button" type="button" class="annotation-icon-button ink-secondary-control" aria-expanded="false" aria-label="手書き太さを変更">
+                <span class="material-symbols-outlined" aria-hidden="true">line_weight</span>
+              </button>
+              <div id="ink-width-palette" class="annotation-popover ink-width-palette" hidden></div>
+            </div>
+            <div class="ink-popover-anchor">
+              <button id="ink-color-button" type="button" class="annotation-icon-button ink-secondary-control is-color-button" aria-expanded="false" aria-label="手書き色を変更">
+                <span class="material-symbols-outlined" aria-hidden="true">palette</span>
+              </button>
+              <div id="ink-color-palette" class="annotation-popover ink-color-palette" hidden></div>
+              <input id="ink-color-input" type="color" class="annotation-color-input" value="#111111" aria-label="手書き色" />
+            </div>
+            <button id="ink-undo-button" type="button" class="annotation-icon-button ink-secondary-control" aria-label="最後の手書き線を元に戻す" disabled>
+              <span class="material-symbols-outlined" aria-hidden="true">undo</span>
+            </button>
+            <button id="ink-delete-button" type="button" class="annotation-icon-button ink-secondary-control" aria-label="選択した手書き線を削除" disabled>
+              <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+            </button>
+          </div>
+          <div id="ink-mode-hint" class="annotation-mode-hint ink-mode-hint" aria-live="polite">手書き OFF</div>
+        </div>
+
+        <aside id="song-extras-ui" class="song-extras-ui" aria-label="Song extras" hidden>
+          <div class="song-extras-header">
+            <div class="song-extras-title">Tags / YouTube</div>
+            <button id="song-extras-collapse-toggle" class="song-extras-collapse-toggle" type="button" aria-expanded="true" aria-label="Collapse song extras">≫</button>
+          </div>
+
+          <section id="song-tags-block" class="song-side-block" hidden>
+            <button id="song-tags-header" type="button" class="song-side-header-button">
+              <span class="song-side-title">Tags</span>
+              <span class="song-side-edit editor-only" data-display="inline-flex">Edit</span>
+            </button>
+            <div id="song-tags" class="song-tags"></div>
+          </section>
+
+          <section id="song-youtube-block" class="song-side-block" hidden>
+            <div class="song-side-header">
+              <button id="song-youtube-header" type="button" class="song-side-header-button">
+                <span class="song-side-title">YouTube</span>
+                <span class="song-side-edit editor-only" data-display="inline-flex">Edit</span>
+              </button>
+              <button id="youtube-search-button" type="button" class="youtube-search-button">YouTubeで検索</button>
+            </div>
+            <div id="song-youtube-list" class="song-youtube-list"></div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div id="song-meta-modal" class="song-meta-modal" hidden>
+    <div class="song-meta-dialog" role="dialog" aria-modal="true" aria-labelledby="song-meta-modal-title">
+      <div class="song-meta-dialog-header">
+        <h2 id="song-meta-modal-title" class="song-meta-dialog-title">項目を編集</h2>
+        <button id="song-meta-modal-close" type="button" class="song-meta-modal-close" aria-label="Close dialog">×</button>
+      </div>
+      <p id="song-meta-modal-help" class="song-meta-modal-help"></p>
+      <textarea id="song-meta-modal-input" class="song-meta-modal-input" rows="8"></textarea>
+      <div id="song-meta-modal-message" class="song-meta-modal-message" aria-live="polite"></div>
+      <div class="song-meta-modal-actions">
+        <button id="song-meta-modal-save" type="button" class="song-meta-modal-save editor-only" data-display="inline-flex">保存</button>
+        <button id="song-meta-modal-cancel" type="button" class="song-meta-modal-cancel">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="sticky-note-delete-modal" class="sticky-note-delete-modal" hidden>
+    <div class="sticky-note-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="sticky-note-delete-title">
+      <h2 id="sticky-note-delete-title" class="sticky-note-delete-title">このメモを削除しますか？</h2>
+      <div class="sticky-note-delete-actions">
+        <button id="sticky-note-delete-cancel" type="button" class="sticky-note-delete-cancel">キャンセル</button>
+        <button id="sticky-note-delete-confirm" type="button" class="sticky-note-delete-confirm">削除</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="youtube-player-shell" class="youtube-player-shell" hidden>
+    <div class="youtube-player-header">
+      <div id="youtube-player-title" class="youtube-player-title">Now Playing</div>
+      <div class="youtube-player-actions">
+        <a id="youtube-player-open" class="youtube-player-open" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer">開く</a>
+        <button id="youtube-player-close" type="button" class="youtube-player-close" aria-label="Close YouTube player">×</button>
+      </div>
+    </div>
+    <div id="youtube-player-host" class="youtube-player-frame" aria-label="YouTube mini player"></div>
+  </div>
+
+  <script src="js/runtime-config.js?v=20260410-refactor1"></script>
+  <script src="js/shared/api.js?v=20260410-refactor1"></script>
+  <script src="js/shared/song-utils.js?v=20260411-youtubevalidation1"></script>
+  <script src="js/chordwiki-render.js?v=20260410-refactor1"></script>
+  <script src="js/auth.js?v=20260410-refactor1"></script>
+  <script src="js/song-core.js?v=20260411-annotations1"></script>
+  <script src="js/song-extras.js?v=20260411-youtubevalidation1"></script>
+  <script src="js/song-autoscroll.js?v=20260410-endmarker1"></script>
+  <script src="js/song-annotations.js?v=20260412-annotations4"></script>
+  <script src="js/song.js?v=20260411-annotations1"></script>
+</body>
+</html>

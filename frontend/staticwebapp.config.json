@@ -2,7 +2,7 @@
   "routes": [
     {
       "route": "/.auth/*",
-      "allowedRoles": ["anonymous"]
+      "allowedRoles": ["anonymous", "authenticated"]
     },
     {
       "route": "/login",
@@ -13,36 +13,26 @@
       "redirect": "/.auth/logout"
     },
     {
-      "route": "/add.html",
-      "redirect": "/edit.html?mode=add",
-      "statusCode": 302
-    },
-    {
-      "route": "/edit.html",
-      "allowedRoles": ["authenticated"]
-    },
-    {
-      "route": "/edit/*",
-      "allowedRoles": ["authenticated"]
-    },
-    {
       "route": "/api/*",
       "allowedRoles": ["authenticated"]
     },
     {
-      "route": "/song.html",
-      "allowedRoles": ["authenticated"]
-    },
-    {
-      "route": "/song/*",
-      "allowedRoles": ["authenticated"]
-    },
-    {
-      "route": "/",
+      "route": "/*",
       "allowedRoles": ["authenticated"]
     }
   ],
+  "navigationFallback": {
+    "rewrite": "/index.html",
+    "exclude": [
+      "/.auth/*",
+      "/api/*"
+    ]
+  },
   "responseOverrides": {
+    "401": {
+      "statusCode": 302,
+      "redirect": "/.auth/login/aad"
+    },
     "403": {
       "rewrite": "/403.html"
     }

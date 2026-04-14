@@ -186,11 +186,12 @@ function getDefaultMarkerPositions() {
   }
 
   const lines = sheetEl.querySelectorAll('p.line, p.comment');
+  const endMarkerOffset = Math.max(0, Number(AUTO_SCROLL_END_MARKER_EXTRA_PX) || 0);
   const defaults = !lines.length
-    ? { startY: bounds.top, endY: bounds.bottom }
+    ? { startY: bounds.top, endY: bounds.bottom + endMarkerOffset }
     : {
         startY: lines[0].getBoundingClientRect().top + window.scrollY,
-        endY: lines[lines.length - 1].getBoundingClientRect().bottom + window.scrollY
+        endY: lines[lines.length - 1].getBoundingClientRect().bottom + window.scrollY + endMarkerOffset
       };
 
   autoScrollState.defaultStartY = defaults.startY;
@@ -198,14 +199,17 @@ function getDefaultMarkerPositions() {
   return defaults;
 }
 
-function clampMarkerToSheet(y, fallbackY = 0) {
+function clampMarkerToSheet(y, fallbackY = 0, markerName = 'start') {
   const bounds = getSheetBoundsDoc();
   if (!bounds) {
     return fallbackY;
   }
 
   const candidate = Number.isFinite(y) ? y : fallbackY;
-  return clamp(candidate, bounds.top, bounds.bottom);
+  const extraBottom = markerName === 'end'
+    ? Math.max(0, Number(AUTO_SCROLL_END_MARKER_EXTRA_PX) || 0)
+    : 0;
+  return clamp(candidate, bounds.top, bounds.bottom + extraBottom);
 }
 
 function getRangeDistancePx() {
@@ -360,9 +364,18 @@ function saveAutoScrollState({ notify = true } = {}) {
   }
 
   try {
+    const defaultStartY = Number.isFinite(autoScrollState.defaultStartY)
+      ? autoScrollState.defaultStartY
+      : autoScrollState.startY;
+    const defaultEndY = Number.isFinite(autoScrollState.defaultEndY)
+      ? autoScrollState.defaultEndY
+      : autoScrollState.endY;
+
     const payload = {
       startY: Math.round(autoScrollState.startY),
       endY: Math.round(autoScrollState.endY),
+      startOffsetPx: Math.round(autoScrollState.startY - defaultStartY),
+      endOffsetPx: Math.round(autoScrollState.endY - defaultEndY),
       durationSec: Math.max(0, Math.round(autoScrollState.durationSec)),
       speedMultiplier: Math.round((Number(autoScrollState.speedMultiplier) || 1) * 100) / 100
     };
@@ -495,10 +508,20 @@ function renderMarkerPositions() {
 }
 
 function applyMarkerStateToRenderedSheet({ resetInvalidRange = false } = {}) {
+  const previousDefaultStartY = autoScrollState.defaultStartY;
+  const previousDefaultEndY = autoScrollState.defaultEndY;
   const defaults = getDefaultMarkerPositions();
 
-  autoScrollState.startY = clampMarkerToSheet(autoScrollState.startY, defaults.startY);
-  autoScrollState.endY = clampMarkerToSheet(autoScrollState.endY, defaults.endY);
+  if (Number.isFinite(previousDefaultStartY) && Number.isFinite(autoScrollState.startY)) {
+    autoScrollState.startY += (defaults.startY - previousDefaultStartY);
+  }
+
+  if (Number.isFinite(previousDefaultEndY) && Number.isFinite(autoScrollState.endY)) {
+    autoScrollState.endY += (defaults.endY - previousDefaultEndY);
+  }
+
+  autoScrollState.startY = clampMarkerToSheet(autoScrollState.startY, defaults.startY, 'start');
+  autoScrollState.endY = clampMarkerToSheet(autoScrollState.endY, defaults.endY, 'end');
 
   if (resetInvalidRange && autoScrollState.endY <= autoScrollState.startY) {
     autoScrollState.startY = defaults.startY;
@@ -533,11 +556,15 @@ function restoreAutoScrollState() {
   }
 
   if (savedState) {
-    if (Number.isFinite(savedState.startY)) {
+    if (Number.isFinite(savedState.startOffsetPx)) {
+      autoScrollState.startY = defaults.startY + savedState.startOffsetPx;
+    } else if (Number.isFinite(savedState.startY)) {
       autoScrollState.startY = savedState.startY;
     }
 
-    if (Number.isFinite(savedState.endY)) {
+    if (Number.isFinite(savedState.endOffsetPx)) {
+      autoScrollState.endY = defaults.endY + savedState.endOffsetPx;
+    } else if (Number.isFinite(savedState.endY)) {
       autoScrollState.endY = savedState.endY;
     }
 
@@ -573,19 +600,21 @@ function restoreAutoScrollState() {
 function setMarkerY(markerName, docY, { persist = true, notify = true } = {}) {
   const defaults = getDefaultMarkerPositions();
   const fallbackY = markerName === 'start' ? defaults.startY : defaults.endY;
-  const nextY = clampMarkerToSheet(docY, fallbackY);
+  const nextY = clampMarkerToSheet(docY, fallbackY, markerName);
 
   if (markerName === 'start') {
     const maxStartY = clampMarkerToSheet(
       Number.isFinite(autoScrollState.endY) ? autoScrollState.endY : defaults.endY,
-      defaults.endY
+      defaults.endY,
+      'start'
     );
     autoScrollState.startY = Math.min(nextY, maxStartY);
     autoScrollState.startFromMarkerPending = true;
   } else {
     const minEndY = clampMarkerToSheet(
       Number.isFinite(autoScrollState.startY) ? autoScrollState.startY : defaults.startY,
-      defaults.startY
+      defaults.startY,
+      'end'
     );
     autoScrollState.endY = Math.max(nextY, minEndY);
   }
@@ -802,7 +831,7 @@ function getAutoScrollStopScrollY() {
     return 0;
   }
 
-  const stopViewportY = window.innerHeight * AUTO_SCROLL_STOP_VIEWPORT_RATIO;
+  const stopViewportY = (window.innerHeight * AUTO_SCROLL_STOP_VIEWPORT_RATIO) - AUTO_SCROLL_END_STOP_BUFFER_PX;
   return clamp(autoScrollState.endY - stopViewportY, 0, getMaxWindowScrollY());
 }
 
@@ -813,8 +842,8 @@ function isEndMarkerVisibleInViewport() {
   }
 
   const rect = endMarkerEl.getBoundingClientRect();
-  // 100px先まで表示されたら true を返す
-  return rect.top <= window.innerHeight + 100;
+  // End がビューポート内へ 100px 入ったら true を返す
+  return rect.top <= window.innerHeight - AUTO_SCROLL_END_STOP_BUFFER_PX;
 }
 
 function stopAutoScroll(message = 'Stopped', tone = 'info', { reachedEnd = false } = {}) {

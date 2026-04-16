@@ -172,13 +172,9 @@ function initializeAutoScrollUi() {
 
     if (
       autoScrollState.isPlaying
-      && !autoScrollState.isProgrammaticScroll
       && Math.abs(window.scrollY - autoScrollState.virtualScrollY) > 3
     ) {
-      autoScrollState.virtualScrollY = window.scrollY;
-      if (autoScrollState.variableScrollEnabled !== false) {
-        syncAutoScrollProgressFromScrollY(window.scrollY);
-      }
+      syncAutoScrollPlaybackFromScrollY(window.scrollY, { userInitiated: true });
     }
   }, { passive: true });
 

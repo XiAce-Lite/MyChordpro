@@ -185,12 +185,13 @@ function getDefaultMarkerPositions() {
     return { startY: 0, endY: 0 };
   }
 
-  const lines = sheetEl.querySelectorAll('p.line, p.comment');
+  const lines = sheetEl.querySelectorAll('p.line:not(.blank), p.comment');
   const endMarkerOffset = Math.max(0, Number(AUTO_SCROLL_END_MARKER_EXTRA_PX) || 0);
+  const firstLyricLine = sheetEl.querySelector('p.line:not(.blank)');
   const defaults = !lines.length
     ? { startY: bounds.top, endY: bounds.bottom + endMarkerOffset }
     : {
-        startY: lines[0].getBoundingClientRect().top + window.scrollY,
+        startY: (firstLyricLine ?? lines[0]).getBoundingClientRect().top + window.scrollY,
         endY: lines[lines.length - 1].getBoundingClientRect().bottom + window.scrollY + endMarkerOffset
       };
 
@@ -938,14 +939,15 @@ function getAutoScrollLeadInStartScrollY() {
   }
 
   return clamp(
-    autoScrollState.startY - (window.innerHeight * AUTO_SCROLL_FOCUS_RATIO_START),
+    // 遅延開始中は開始位置を固定し、余計な先行スクロールを発生させない。
+    autoScrollState.startY - (window.innerHeight * AUTO_SCROLL_FOCUS_RATIO_FINAL),
     0,
     getMaxWindowScrollY()
   );
 }
 
 function getLineLyricLength(lineEl) {
-  if (!(lineEl instanceof Element) || !lineEl.matches('p.line')) {
+  if (!(lineEl instanceof Element) || !lineEl.matches('p.line:not(.blank)')) {
     return 0;
   }
 
@@ -984,7 +986,7 @@ function collectAutoScrollLineEntries() {
     return [];
   }
 
-  const lines = Array.from(sheetEl.querySelectorAll('p.line, p.comment'));
+  const lines = Array.from(sheetEl.querySelectorAll('p.line:not(.blank), p.comment'));
   const entries = [];
 
   lines.forEach((lineEl) => {
@@ -1083,9 +1085,14 @@ function buildAutoScrollTimeline() {
     entries,
     segments,
     durationSec: Math.max(1, autoScrollState.mainDurationSec || 0),
-    startFocusY: entries[0].centerY,
+    startFocusY: Number.isFinite(autoScrollState.startY) ? autoScrollState.startY : entries[0].centerY,
     endFocusY: entries[entries.length - 1].centerY
   };
+
+  if (segments.length && Number.isFinite(autoScrollState.startY)) {
+    segments[0].startY = autoScrollState.startY;
+  }
+
   autoScrollState.timelineReady = true;
   return true;
 }
@@ -1111,6 +1118,9 @@ function getTimelineFocusYAtProgress(progressSec) {
   }
 
   const safeProgress = clamp(Number(progressSec) || 0, 0, timeline.durationSec);
+  if (safeProgress <= 0.0001 && Number.isFinite(autoScrollState.startY)) {
+    return autoScrollState.startY;
+  }
   const segment = timeline.segments.find((item) => safeProgress <= item.endSec + 0.0001)
     || timeline.segments[timeline.segments.length - 1];
 
@@ -1151,7 +1161,7 @@ function estimateProgressSecFromFocusY(focusY) {
   return clamp(bestProgressSec, 0, timeline.durationSec);
 }
 
-function syncAutoScrollProgressFromScrollY(scrollY) {
+function syncAutoScrollProgressFromScrollY(scrollY, { markAsStarted = true } = {}) {
   if (!autoScrollState.isPlaying || !autoScrollState.timelineReady || !autoScrollState.timeline) {
     return;
   }
@@ -1164,7 +1174,9 @@ function syncAutoScrollProgressFromScrollY(scrollY) {
 
   autoScrollState.progressSec = estimateProgressSecFromFocusY(focusY);
   autoScrollState.phase = 'main';
-  autoScrollState.hasScrollStarted = true;
+  if (markAsStarted) {
+    autoScrollState.hasScrollStarted = true;
+  }
   autoScrollState.phaseElapsedSec = autoScrollState.leadInSec;
   autoScrollState.focusRatioCurrent = AUTO_SCROLL_FOCUS_RATIO_FINAL;
   autoScrollState.lastFrameMs = performance.now();
@@ -1174,83 +1186,46 @@ function syncAutoScrollProgressFromScrollY(scrollY) {
   }
 }
 
-function isAutoScrollUserOverrideActive(nowMs = performance.now()) {
-  return Number.isFinite(autoScrollState.userScrollOverrideUntilMs)
-    && nowMs < autoScrollState.userScrollOverrideUntilMs;
-}
-
-function markAutoScrollUserOverride(nowMs = performance.now()) {
-  autoScrollState.userScrollOverrideUntilMs = nowMs + AUTO_SCROLL_USER_OVERRIDE_COOLDOWN_MS;
-}
-
-function syncLegacyAutoScrollElapsedFromScrollY(scrollY) {
-  const currentY = Number.isFinite(scrollY) ? scrollY : window.scrollY;
-  const startScrollY = getAutoScrollStartScrollY();
-  const stopScrollY = getAutoScrollStopScrollY();
-  const range = Math.max(1, stopScrollY - startScrollY);
-  const ratio = clamp((currentY - startScrollY) / range, 0, 1);
-
-  autoScrollState.playbackElapsedSec = clamp(
-    autoScrollState.durationSec * ratio,
-    0,
-    Math.max(0, Number(autoScrollState.durationSec) || 0)
-  );
-  autoScrollState.phase = 'main';
-  autoScrollState.hasScrollStarted = true;
-  autoScrollState.phaseElapsedSec = autoScrollState.playbackElapsedSec;
-  autoScrollState.focusRatioCurrent = AUTO_SCROLL_FOCUS_RATIO_FINAL;
-}
-
-function syncAutoScrollPlaybackFromScrollY(scrollY, { userInitiated = true } = {}) {
+function syncAutoScrollPlaybackFromScrollY(scrollY, { fromUserScroll = false, markAsStarted = true } = {}) {
   if (!autoScrollState.isPlaying) {
     return;
   }
 
-  const effectiveScrollY = getReachableScrollY(Number.isFinite(scrollY) ? scrollY : window.scrollY);
+  const effectiveScrollY = Number.isFinite(scrollY) ? scrollY : window.scrollY;
   autoScrollState.virtualScrollY = effectiveScrollY;
 
+  if (fromUserScroll) {
+    autoScrollState.userScrollOverrideUntilMs = performance.now() + AUTO_SCROLL_USER_SCROLL_OVERRIDE_MS;
+  }
+
   if (autoScrollState.variableScrollEnabled === false) {
-    syncLegacyAutoScrollElapsedFromScrollY(effectiveScrollY);
-  } else {
-    if (!autoScrollState.timelineReady || !autoScrollState.timeline) {
-      refreshAutoScrollTimelineFromCurrentSettings();
-      if (!autoScrollState.timelineReady || !autoScrollState.timeline) {
-        return;
-      }
-    }
-
-    const focusRatio = Number.isFinite(autoScrollState.focusRatioCurrent)
-      ? autoScrollState.focusRatioCurrent
-      : AUTO_SCROLL_FOCUS_RATIO_FINAL;
-    const focusY = effectiveScrollY + (window.innerHeight * focusRatio);
-    const progressSec = autoScrollState.timelineReady && autoScrollState.timeline
-      ? estimateProgressSecFromFocusY(focusY)
-      : 0;
-
-    autoScrollState.progressSec = progressSec;
+    const startScrollY = getAutoScrollStartScrollY();
+    const stopScrollY = getAutoScrollStopScrollY();
+    const range = Math.max(1, stopScrollY - startScrollY);
+    const ratio = clamp((effectiveScrollY - startScrollY) / range, 0, 1);
+    const duration = Math.max(0, Number(autoScrollState.durationSec) || 0);
+    autoScrollState.playbackElapsedSec = clamp(duration * ratio, 0, duration);
     autoScrollState.phase = 'main';
-    autoScrollState.hasScrollStarted = true;
-    autoScrollState.phaseElapsedSec = autoScrollState.leadInSec;
+    if (markAsStarted) {
+      autoScrollState.hasScrollStarted = ratio > 0.001;
+    }
+    autoScrollState.phaseElapsedSec = autoScrollState.playbackElapsedSec;
     autoScrollState.focusRatioCurrent = AUTO_SCROLL_FOCUS_RATIO_FINAL;
-    autoScrollState.playbackElapsedSec = clamp(
-      autoScrollState.leadInSec + progressSec,
-      0,
-      Math.max(0, Number(autoScrollState.durationSec) || 0)
-    );
-  }
-
-  autoScrollState.lastFrameMs = performance.now();
-  autoScrollState.lastStatusRemainingSec = null;
-  autoScrollState.lastStatusTone = '';
-  autoScrollState.lastStatusSpeed = null;
-
-  if (userInitiated) {
-    markAutoScrollUserOverride(autoScrollState.lastFrameMs);
-  }
-
-  if (autoScrollState.isPlaying) {
+    autoScrollState.lastFrameMs = performance.now();
     updatePlayingStatus({ force: true });
+    return;
   }
+
+  if (!autoScrollState.timelineReady || !autoScrollState.timeline) {
+    return;
+  }
+
+  syncAutoScrollProgressFromScrollY(effectiveScrollY, { markAsStarted });
+  autoScrollState.playbackElapsedSec = clamp(
+    autoScrollState.leadInSec + autoScrollState.progressSec,
+    0,
+    Math.max(0, Number(autoScrollState.durationSec) || 0)
+  );
 }
 
 function getAutoScrollStartScrollY() {
@@ -1385,15 +1360,14 @@ function runAutoScrollFrame(nowMs) {
   const deltaSec = Math.max(0, (nowMs - autoScrollState.lastFrameMs) / 1000);
   autoScrollState.lastFrameMs = nowMs;
 
-  if (isEndMarkerVisibleInViewport()) {
-    stopAutoScroll('Stopped · End が見えたため停止', 'success', { reachedEnd: true });
+  if (autoScrollState.userScrollOverrideUntilMs > nowMs) {
+    autoScrollState.virtualScrollY = window.scrollY;
+    autoScrollState.frameId = window.requestAnimationFrame(runAutoScrollFrame);
     return;
   }
 
-  if (isAutoScrollUserOverrideActive(nowMs)) {
-    autoScrollState.virtualScrollY = window.scrollY;
-    updatePlayingStatus();
-    autoScrollState.frameId = window.requestAnimationFrame(runAutoScrollFrame);
+  if (isEndMarkerVisibleInViewport()) {
+    stopAutoScroll('Stopped · End が見えたため停止', 'success', { reachedEnd: true });
     return;
   }
 
@@ -1403,13 +1377,14 @@ function runAutoScrollFrame(nowMs) {
     ? autoScrollState.focusRatioCurrent
     : AUTO_SCROLL_FOCUS_RATIO_FINAL;
 
+  autoScrollState.playbackElapsedSec = Math.min(
+    Math.max(0, Number(autoScrollState.durationSec) || 0),
+    autoScrollState.playbackElapsedSec + effectiveDeltaSec
+  );
+
   if (autoScrollState.variableScrollEnabled === false) {
     autoScrollState.phase = 'main';
     autoScrollState.hasScrollStarted = true;
-    autoScrollState.playbackElapsedSec = Math.min(
-      Math.max(0, Number(autoScrollState.durationSec) || 0),
-      autoScrollState.playbackElapsedSec + effectiveDeltaSec
-    );
 
     if (!recalculateAutoScrollSpeed()) {
       return;
@@ -1429,28 +1404,19 @@ function runAutoScrollFrame(nowMs) {
   }
 
   if (autoScrollState.phase === 'lead-in') {
-    autoScrollState.playbackElapsedSec = Math.min(
-      Math.max(0, Number(autoScrollState.durationSec) || 0),
-      autoScrollState.playbackElapsedSec + effectiveDeltaSec
-    );
     autoScrollState.phaseElapsedSec += effectiveDeltaSec;
 
     const leadRatio = autoScrollState.leadInSec > 0
       ? clamp(autoScrollState.phaseElapsedSec / autoScrollState.leadInSec, 0, 1)
       : 1;
-    const eased = easeInOutCubic(leadRatio);
-    focusRatioCurrent = AUTO_SCROLL_FOCUS_RATIO_START
-      + ((AUTO_SCROLL_FOCUS_RATIO_FINAL - AUTO_SCROLL_FOCUS_RATIO_START) * eased);
+    // 遅延開始中は表示位置を固定し、実スクロール開始までは画面を動かさない。
+    focusRatioCurrent = AUTO_SCROLL_FOCUS_RATIO_FINAL;
 
     if (leadRatio >= 1) {
       autoScrollState.phase = 'main';
       focusRatioCurrent = AUTO_SCROLL_FOCUS_RATIO_FINAL;
     }
   } else {
-    autoScrollState.playbackElapsedSec = Math.min(
-      Math.max(0, Number(autoScrollState.durationSec) || 0),
-      autoScrollState.playbackElapsedSec + effectiveDeltaSec
-    );
     autoScrollState.progressSec = clamp(
       autoScrollState.progressSec + effectiveDeltaSec,
       0,
@@ -1462,18 +1428,14 @@ function runAutoScrollFrame(nowMs) {
   autoScrollState.focusRatioCurrent = focusRatioCurrent;
 
   const focusY = autoScrollState.phase === 'lead-in'
-    ? (Number.isFinite(autoScrollState.timeline?.startFocusY) ? autoScrollState.timeline.startFocusY : autoScrollState.startY)
+    ? autoScrollState.startY
     : getTimelineFocusYAtProgress(autoScrollState.progressSec);
   const targetScrollY = focusY - (window.innerHeight * focusRatioCurrent);
   const reachableTargetScrollY = getReachableScrollY(targetScrollY);
 
   setAutoScrollScrollY(reachableTargetScrollY);
 
-  if (
-    !autoScrollState.hasScrollStarted
-    && autoScrollState.phase !== 'lead-in'
-    && Math.abs(window.scrollY - autoScrollState.playStartScrollY) > 0.6
-  ) {
+  if (!autoScrollState.hasScrollStarted && Math.abs(window.scrollY - autoScrollState.playStartScrollY) > 0.6) {
     autoScrollState.hasScrollStarted = true;
   }
 
@@ -1540,13 +1502,13 @@ function startAutoScroll() {
     return;
   }
 
-  const rewindToStart = shouldScrollToStart();
   const startScrollY = getAutoScrollStartScrollY();
+  const shouldStartAtMarker = shouldScrollToStart();
   const stopScrollY = getAutoScrollStopScrollY();
   const currentScrollY = getReachableScrollY(window.scrollY);
   const isWithinPlayableRange = currentScrollY >= (startScrollY - START_SCROLL_TOLERANCE_PX)
     && currentScrollY <= (stopScrollY + START_SCROLL_TOLERANCE_PX);
-  const shouldResumeFromCurrent = !rewindToStart
+  const shouldResumeFromCurrent = !shouldStartAtMarker
     && isWithinPlayableRange
     && Math.abs(currentScrollY - startScrollY) > START_SCROLL_TOLERANCE_PX;
 
@@ -1558,10 +1520,10 @@ function startAutoScroll() {
 
     const leadInStartScrollY = getAutoScrollLeadInStartScrollY();
 
-    if (rewindToStart) {
+    if (shouldStartAtMarker) {
       setAutoScrollScrollY(leadInStartScrollY);
     }
-  } else if (rewindToStart) {
+  } else if (shouldStartAtMarker) {
     setAutoScrollScrollY(startScrollY);
   }
 
@@ -1572,6 +1534,7 @@ function startAutoScroll() {
   autoScrollState.lastFrameMs = autoScrollState.startedAtMs;
   autoScrollState.virtualScrollY = window.scrollY;
   autoScrollState.playStartScrollY = window.scrollY;
+  autoScrollState.userScrollOverrideUntilMs = 0;
   autoScrollState.progressSec = 0;
   autoScrollState.playbackElapsedSec = 0;
   autoScrollState.phase = (autoScrollState.variableScrollEnabled !== false && autoScrollState.leadInSec > 0) ? 'lead-in' : 'main';
@@ -1580,15 +1543,16 @@ function startAutoScroll() {
   autoScrollState.focusRatioCurrent = autoScrollState.phase === 'lead-in'
     ? AUTO_SCROLL_FOCUS_RATIO_START
     : AUTO_SCROLL_FOCUS_RATIO_FINAL;
-  autoScrollState.userScrollOverrideUntilMs = 0;
   autoScrollState.lastStatusRemainingSec = null;
   autoScrollState.lastStatusTone = '';
   autoScrollState.lastStatusSpeed = null;
 
   if (shouldResumeFromCurrent) {
-    syncAutoScrollPlaybackFromScrollY(window.scrollY, { userInitiated: false });
     autoScrollState.phase = 'main';
-    autoScrollState.hasScrollStarted = true;
+    autoScrollState.hasScrollStarted = false;
+    autoScrollState.phaseElapsedSec = autoScrollState.leadInSec;
+    autoScrollState.focusRatioCurrent = AUTO_SCROLL_FOCUS_RATIO_FINAL;
+    syncAutoScrollPlaybackFromScrollY(window.scrollY, { fromUserScroll: false, markAsStarted: false });
   }
 
   if (!recalculateAutoScrollSpeed()) {
@@ -1655,16 +1619,12 @@ async function handleDeleteSong() {
 
   try {
     const response = await fetch(
-      buildEditSongApiUrl(id),
+      buildEditSongApiUrl(artist, id),
       {
         method: 'DELETE',
         credentials: 'include'
       }
     );
-
-    if (window.ChordWikiApiUtils?.handleUnauthorized?.(response)) {
-      return;
-    }
 
     const body = await parseJsonResponse(response);
     if (!response.ok) {

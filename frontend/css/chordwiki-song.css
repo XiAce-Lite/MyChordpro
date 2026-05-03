@@ -6,6 +6,7 @@
   --user-chord-offset: 7px;
   --user-chord-line-offset: 0px;
   --user-lyric-gap: 15px;
+  --user-blank-line-height: 14px;
   --user-comment-gap: 16px;
   --marker-safe-left: 6em;
   --marker-left-offset: 82px;
@@ -857,6 +858,31 @@ html.editor-enabled .editor-only[data-display="inline-flex"] {
   font-weight: 600;
 }
 
+.display-select-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  color: #23415f;
+}
+
+.display-chord-style-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 13px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  color: #163a5c;
+  background: #fff;
+  cursor: pointer;
+}
+
+.display-chord-style-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .display-number-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1645,6 +1671,11 @@ html[data-display-custom="on"] body {
 
 html[data-display-custom="on"] p.line {
   margin-bottom: var(--user-lyric-gap, 15px);
+}
+
+html[data-display-custom="on"] p.line.blank {
+  min-height: var(--user-blank-line-height, 14px);
+  margin-bottom: var(--user-blank-line-height, 14px);
 }
 
 html[data-display-custom="on"][data-lyric-weight="bold"] span.word,

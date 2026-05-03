@@ -18,13 +18,13 @@
     return global.ChordWikiRuntime?.buildApiUrl?.(path) || path;
   }
 
-  function buildSongApiUrl(id) {
+  function buildSongApiUrl(_artist, id) {
     const params = new URLSearchParams();
     params.set('id', String(id || '').trim());
     return buildApiUrl(`/api/song?${params.toString()}`);
   }
 
-  function buildEditSongApiUrl(id) {
+  function buildEditSongApiUrl(_artist, id) {
     const params = new URLSearchParams();
     params.set('id', String(id || '').trim());
     return buildApiUrl(`/api/edit-song?${params.toString()}`);

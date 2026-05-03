@@ -77,7 +77,8 @@ function setFormDisabled(disabled) {
 function updatePageMeta() {
   const isEdit = state.mode === 'edit';
 
-  document.title = isEdit ? 'MyChordpro - Edit Song' : 'MyChordpro - Add Song';
+  const appName = window.ChordWikiRuntime?.appName || 'ChordWiki';
+  document.title = isEdit ? `${appName} - Edit Song` : `${appName} - Add Song`;
   pageTitleEl.textContent = isEdit ? 'コード譜編集' : 'コード譜の新規追加';
   pageDescriptionEl.textContent = isEdit
     ? '既存の曲データを読み込み、内容を更新します。ID は固定です。'
@@ -123,7 +124,7 @@ async function loadSongForEdit() {
 
   try {
     const response = await fetch(
-      buildSongApiUrl(state.originalId),
+      buildSongApiUrl(state.originalArtist, state.originalId),
       { credentials: 'include' }
     );
 
@@ -179,7 +180,7 @@ async function handleDelete() {
 
   try {
     const response = await fetch(
-      buildEditSongApiUrl(state.originalId),
+      buildEditSongApiUrl(state.originalArtist, state.originalId),
       {
         method: 'DELETE',
         credentials: 'include'
@@ -252,7 +253,7 @@ async function handleSubmit(event) {
 
   const isEdit = state.mode === 'edit';
   const endpoint = isEdit
-    ? buildEditSongApiUrl(state.originalId)
+    ? buildEditSongApiUrl(state.originalArtist, state.originalId)
     : buildApiUrl('/api/edit-song');
 
   state.isSubmitting = true;

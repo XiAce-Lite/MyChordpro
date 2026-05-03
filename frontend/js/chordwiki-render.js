@@ -476,3 +476,155 @@ function renderChordWikiLike(chordProText, containerEl, transposeSemitones = 0, 
 
   return { title: parsed.title, subtitle: parsed.subtitle, key: parsed.key };
 }
+
+function normalizeChordToken(token) {
+  return String(token || "")
+    .replace(/（/g, "(")
+    .replace(/）/g, ")");
+}
+
+function escapeHtml(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function getChordSegmentBeforeIndex(source, index) {
+  let start = index - 1;
+  while (start >= 0 && !/[\s\(\)\/,]/.test(source[start])) {
+    start -= 1;
+  }
+
+  return source.slice(start + 1, index).toLowerCase();
+}
+
+function findMatchingParenthesisIndex(source, openIndex) {
+  let depth = 0;
+
+  for (let index = openIndex; index < source.length; index += 1) {
+    if (source[index] === "(") {
+      depth += 1;
+    } else if (source[index] === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+}
+
+function convertChordToSuperscriptHtml(chordText) {
+  const source = normalizeChordToken(chordText);
+  if (!source) {
+    return "";
+  }
+
+  const accidentalSymbolMap = {
+    b: "♭",
+    "#": "♯",
+    "♭": "♭",
+    "♯": "♯"
+  };
+  const renderSuperscriptAccidental = (value) => `<span class="cw-chord-accidental">${escapeHtml(accidentalSymbolMap[value] || value)}</span>`;
+  const renderSuperscriptContent = (value) => Array.from(String(value || "")).map((character, characterIndex, characters) => {
+    const nextCharacter = characters[characterIndex + 1] || "";
+    if (/[b#♭♯]/.test(character) && /\d/.test(nextCharacter)) {
+      return renderSuperscriptAccidental(character);
+    }
+
+    return escapeHtml(character);
+  }).join("");
+
+  let result = "";
+  let index = 0;
+  let lastAffix = "";
+
+  while (index < source.length) {
+    const rest = source.slice(index);
+
+    // sus/aug/dim/omit/add -> affix class (mid-size, not superscript)
+    const affixMatch = rest.match(/^(sus|aug|dim|omit|add)/i);
+    if (affixMatch) {
+      result += `<span class="cw-chord-affix">${escapeHtml(affixMatch[0])}</span>`;
+      lastAffix = affixMatch[0].toLowerCase();
+      index += affixMatch[0].length;
+      continue;
+    }
+
+    // paren group with tension digits -> whole paren is superscript
+    // plain chord groups like (Eb) are parsed recursively as a normal chord.
+    if (source[index] === "(") {
+      const closeIndex = findMatchingParenthesisIndex(source, index);
+      if (closeIndex !== -1) {
+        const inner = source.slice(index + 1, closeIndex);
+        const looksLikeChordGroup = /^(?:[A-G][b#♭♯]?|N\.C\.?)/.test(inner.trim());
+        if (looksLikeChordGroup) {
+          result += `(${convertChordToSuperscriptHtml(inner)})`;
+        } else if (/\d/.test(inner)) {
+          result += `<sup>(${renderSuperscriptContent(inner)})</sup>`;
+        } else {
+          result += `(${convertChordToSuperscriptHtml(inner)})`;
+        }
+        lastAffix = "";
+        index = closeIndex + 1;
+        continue;
+      }
+    }
+
+    // altered tension: b9, #11, -5 etc -> superscript
+    const alteredTensionMatch = rest.match(/^[b#♭♯\-](13|11|9|6|5)/);
+    if (alteredTensionMatch) {
+      result += `<sup>${renderSuperscriptContent(alteredTensionMatch[0])}</sup>`;
+      lastAffix = "";
+      index += alteredTensionMatch[0].length;
+      continue;
+    }
+
+    // 9/11/13 -> superscript; 7 -> mid class (not superscript)
+    // after affix(sus/aug/dim/omit/add), tension numbers are superscript.
+    const tensionNumberMatch = rest.match(/^(13|11|9|7|6|5|4|3|2)/);
+    if (tensionNumberMatch) {
+      if (lastAffix) {
+        result += `<sup>${escapeHtml(tensionNumberMatch[0])}</sup>`;
+      } else if (tensionNumberMatch[0] === "7") {
+        result += `<span class="cw-chord-mid">7</span>`;
+      } else if (tensionNumberMatch[0] === "6" || tensionNumberMatch[0] === "9" || tensionNumberMatch[0] === "11" || tensionNumberMatch[0] === "13") {
+        result += `<sup>${escapeHtml(tensionNumberMatch[0])}</sup>`;
+      } else {
+        result += escapeHtml(tensionNumberMatch[0]);
+      }
+      lastAffix = "";
+      index += tensionNumberMatch[0].length;
+      continue;
+    }
+
+    // capital M (major) immediately before a digit -> mid class
+    if (source[index] === "M" && /\d/.test(source[index + 1] || "")) {
+      result += `<span class="cw-chord-mid">M</span>`;
+      lastAffix = "";
+      index += 1;
+      continue;
+    }
+
+    // accidental after a note letter -> superscript (also for Bb7, F#7)
+    const currentChar = source[index];
+    const previousChar = source[index - 1] || "";
+    if (/[b#♭♯]/.test(currentChar) && /[A-Ga-g]/.test(previousChar)) {
+      result += `<sup>${renderSuperscriptAccidental(currentChar)}</sup>`;
+      lastAffix = "";
+      index += 1;
+      continue;
+    }
+
+    result += escapeHtml(currentChar);
+    lastAffix = "";
+    index += 1;
+  }
+
+  return result;
+}

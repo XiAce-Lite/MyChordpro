@@ -46,6 +46,7 @@
 
   global.ChordWikiRuntime = {
     DEFAULT_LOCAL_API_ORIGIN,
+    appName: 'MyChordpro',
     isLocalPreview,
     getApiOrigin,
     buildApiUrl

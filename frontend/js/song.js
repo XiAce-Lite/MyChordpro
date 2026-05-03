@@ -40,7 +40,7 @@ async function loadSong() {
 
   try {
     const response = await fetch(
-      buildSongApiUrl(id),
+      buildSongApiUrl(artist, id),
       { credentials: 'include' }
     );
 
@@ -241,11 +241,12 @@ function initializeDisplayPreferencesUi() {
 
   const enabledInput = document.getElementById('display-custom-enabled');
   const adjustInput = document.getElementById('display-adjust-chordpos');
-  const mnotoInput = document.getElementById('display-mnoto-enabled');
+  const chordStyleSelect = document.getElementById('display-chord-style');
   const fontSizeInput = document.getElementById('display-chord-font-size');
   const offsetInput = document.getElementById('display-chord-offset');
   const lineOffsetInput = document.getElementById('display-chord-line-offset');
   const lyricGapInput = document.getElementById('display-lyric-gap');
+  const blankLineHeightInput = document.getElementById('display-blank-line-height');
   const commentGapInput = document.getElementById('display-comment-gap');
   const lyricWeightInput = document.getElementById('display-lyric-weight');
   const commentWeightInput = document.getElementById('display-comment-weight');
@@ -278,6 +279,12 @@ function initializeDisplayPreferencesUi() {
       32,
       DEFAULT_DISPLAY_PREFS.lyricLineGapPx
     );
+    displayPrefsState.blankLineHeightPx = clampDisplayPreferenceNumber(
+      blankLineHeightInput?.value,
+      4,
+      32,
+      DEFAULT_DISPLAY_PREFS.blankLineHeightPx
+    );
     displayPrefsState.commentLineGapPx = clampDisplayPreferenceNumber(
       commentGapInput?.value,
       8,
@@ -304,8 +311,8 @@ function initializeDisplayPreferencesUi() {
     commitDisplayPreferences();
   });
 
-  mnotoInput?.addEventListener('change', () => {
-    displayPrefsState.mnotoEnabled = mnotoInput.checked;
+  chordStyleSelect?.addEventListener('change', () => {
+    displayPrefsState.chordStyle = chordStyleSelect.value;
     commitDisplayPreferences();
   });
 
@@ -313,6 +320,7 @@ function initializeDisplayPreferencesUi() {
   offsetInput?.addEventListener('change', commitDisplayPreferences);
   lineOffsetInput?.addEventListener('change', commitDisplayPreferences);
   lyricGapInput?.addEventListener('change', commitDisplayPreferences);
+  blankLineHeightInput?.addEventListener('change', commitDisplayPreferences);
   commentGapInput?.addEventListener('change', commitDisplayPreferences);
   lyricWeightInput?.addEventListener('change', commitDisplayPreferences);
   commentWeightInput?.addEventListener('change', commitDisplayPreferences);

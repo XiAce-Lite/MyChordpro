@@ -150,7 +150,7 @@
   - `COSMOS_ENDPOINT`
   - `COSMOS_KEY`
   - `COSMOS_DATABASE` または `COSMOS_DB_NAME`（既定値: `MyChordpro`）
-  - `COSMOS_CONTAINER` または `COSMOS_DB_CONTAINER`（既定値: `Songs`）
+  - `COSMOS_CONTAINER_SONGS` または `COSMOS_DB_CONTAINER`（既定値: `Songs`）
 
 ### 3.3 Azure Cosmos DB（Core SQL / Free Tier 想定）
 
@@ -541,7 +541,7 @@
 - Cosmos DB の Primary Key を変更した場合は、
   SWA / Functions のアプリ設定も更新すること
 - 環境変数名は `COSMOS_ENDPOINT` / `COSMOS_KEY` を必須とし、
-  DB/Container は `COSMOS_DATABASE` / `COSMOS_CONTAINER`（または互換名）を使用する
+  DB/Container は `COSMOS_DATABASE` / `COSMOS_CONTAINER_SONGS`（または互換名）を使用する
 
 ---
 

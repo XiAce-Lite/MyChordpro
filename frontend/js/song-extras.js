@@ -305,6 +305,26 @@ function getAutoScrollUiEl() {
   return document.getElementById('autoscroll-ui');
 }
 
+function getCurrentSongIdForPanelState() {
+  return String(currentSongData?.id || getQueryParam('id') || '').trim();
+}
+
+function getPanelStateSnapshot() {
+  const songId = getCurrentSongIdForPanelState();
+  if (!songId) {
+    return {};
+  }
+  return window.ChordWikiStorageKeys?.readPanelState?.(songId) || {};
+}
+
+function savePanelStatePartial(partialState = {}) {
+  const songId = getCurrentSongIdForPanelState();
+  if (!songId) {
+    return {};
+  }
+  return window.ChordWikiStorageKeys?.writePanelState?.(songId, partialState) || {};
+}
+
 function setAutoScrollCollapsed(collapsed) {
   const uiEl = getAutoScrollUiEl();
   const toggleButton = document.getElementById('autoscroll-collapse-toggle');
@@ -327,15 +347,16 @@ function setAutoScrollCollapsed(collapsed) {
     refreshSongExtrasLayout();
   });
 
-  try {
-    window.localStorage.setItem(AUTO_SCROLL_COLLAPSED_STORAGE_KEY, isCollapsed ? '1' : '0');
-  } catch (error) {
-    console.warn('Failed to save collapse state:', error);
-  }
+  savePanelStatePartial({ controls: !isCollapsed });
 }
 
 function restoreAutoScrollCollapsedState() {
   try {
+    const panelState = getPanelStateSnapshot();
+    if (typeof panelState.controls === 'boolean') {
+      setAutoScrollCollapsed(!panelState.controls);
+      return;
+    }
     const raw = window.localStorage.getItem(AUTO_SCROLL_COLLAPSED_STORAGE_KEY);
     setAutoScrollCollapsed(raw === '1');
   } catch (error) {
@@ -374,15 +395,23 @@ function setSongExtrasCollapsed(collapsed) {
     refreshSongExtrasLayout();
   });
 
-  try {
-    window.localStorage.setItem(SONG_EXTRAS_COLLAPSED_STORAGE_KEY, isCollapsed ? '1' : '0');
-  } catch (error) {
-    console.warn('Failed to save extras collapse state:', error);
-  }
+  savePanelStatePartial({
+    tags: !isCollapsed,
+    youtube: !isCollapsed
+  });
 }
 
 function restoreSongExtrasCollapsedState() {
   try {
+    const panelState = getPanelStateSnapshot();
+    const hasTags = typeof panelState.tags === 'boolean';
+    const hasYoutube = typeof panelState.youtube === 'boolean';
+    if (hasTags || hasYoutube) {
+      const tagsVisible = hasTags ? panelState.tags : true;
+      const youtubeVisible = hasYoutube ? panelState.youtube : true;
+      setSongExtrasCollapsed(!(tagsVisible || youtubeVisible));
+      return;
+    }
     const raw = window.localStorage.getItem(SONG_EXTRAS_COLLAPSED_STORAGE_KEY);
     setSongExtrasCollapsed(raw === '1');
   } catch (error) {

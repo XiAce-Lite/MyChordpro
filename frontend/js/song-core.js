@@ -5,6 +5,7 @@ const {
   SONG_EXTRAS_COLLAPSED_STORAGE_KEY,
   DISPLAY_PREFS_STORAGE_KEY,
   DISPLAY_PREFS_COLLAPSED_STORAGE_KEY,
+  getTransposeStorageKey,
   buildSongScopedKey
 } = window.ChordWikiStorageKeys;
 
@@ -37,10 +38,16 @@ let originalChordPro = '';
 let transposeSemitones = 0;
 let accidentalMode = 'none';
 let songPrefsStorageKey = null;
+let songTransposeStorageKey = null;
 let currentSongKey = '';
 let currentSongEstimatedKey = '';
 let currentSongEstimatedKeyMode = 'sharp';
 let currentSongData = null;
+const SONG_PAGE_STATE_LOADING = 'loading';
+const SONG_PAGE_STATE_READY = 'ready';
+const SONG_PAGE_STATE_PARTIAL_ERROR = 'partial_error';
+const SONG_PAGE_STATE_FATAL_ERROR = 'fatal_error';
+let songPageState = SONG_PAGE_STATE_LOADING;
 
 const MIN_TRANSPOSE = -6;
 const MAX_TRANSPOSE = 6;
@@ -174,6 +181,22 @@ const youtubePlayerState = {
   currentStart: 0
 };
 
+function setSongPageState(nextState) {
+  songPageState = String(nextState || SONG_PAGE_STATE_LOADING);
+  const bodyEl = document.body;
+  if (!bodyEl) {
+    return;
+  }
+  bodyEl.dataset.songPageState = songPageState;
+}
+
+function markSongPagePartialError() {
+  if (songPageState === SONG_PAGE_STATE_FATAL_ERROR) {
+    return;
+  }
+  setSongPageState(SONG_PAGE_STATE_PARTIAL_ERROR);
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -193,6 +216,13 @@ function getSongStorageKey(artist, id) {
 
 function getSongPrefsStorageKey(artist, id) {
   return buildSongScopedKey(SONG_PREFS_STORAGE_PREFIX, artist, id);
+}
+
+function getSongTransposeStorageKey(id) {
+  if (typeof getTransposeStorageKey === 'function') {
+    return getTransposeStorageKey(id);
+  }
+  return '';
 }
 
 function isLocalFilePreview() {
@@ -488,6 +518,18 @@ function loadSongPreferences() {
   transposeSemitones = 0;
   accidentalMode = 'none';
 
+  if (songTransposeStorageKey) {
+    try {
+      const rawTranspose = window.localStorage.getItem(songTransposeStorageKey);
+      const parsedTranspose = Number(rawTranspose);
+      if (Number.isFinite(parsedTranspose)) {
+        transposeSemitones = clampTranspose(parsedTranspose);
+      }
+    } catch (error) {
+      console.warn('Failed to restore transpose preference:', error);
+    }
+  }
+
   if (!songPrefsStorageKey) {
     return;
   }
@@ -499,11 +541,6 @@ function loadSongPreferences() {
       return;
     }
 
-    const storedTranspose = Number(storedPrefs.transposeSemitones);
-    if (Number.isFinite(storedTranspose)) {
-      transposeSemitones = clampTranspose(storedTranspose);
-    }
-
     accidentalMode = normalizeAccidentalModeValue(storedPrefs.accidentalMode);
   } catch (error) {
     console.warn('Failed to restore song preferences:', error);
@@ -511,6 +548,14 @@ function loadSongPreferences() {
 }
 
 function saveSongPreferences() {
+  if (songTransposeStorageKey) {
+    try {
+      window.localStorage.setItem(songTransposeStorageKey, String(Math.trunc(transposeSemitones)));
+    } catch (error) {
+      console.warn('Failed to save transpose preference:', error);
+    }
+  }
+
   if (!songPrefsStorageKey) {
     return;
   }
@@ -1467,6 +1512,7 @@ async function tryRenderLocalTestSong(artist = '', id = '') {
 
   const rendered = renderLoadedSong(localSong, artist, id);
   if (rendered) {
+    setSongPageState(SONG_PAGE_STATE_READY);
     setStatus('Local sample loaded', 'success');
   }
   return rendered;
@@ -1493,9 +1539,11 @@ function trackSongView(artist, id) {
       const body = await parseJsonResponse(response);
       const detail = getErrorDetail(body, `HTTP ${response.status}`);
       console.warn('Failed to update song view score:', detail);
+      markSongPagePartialError();
     })
     .catch((error) => {
       console.warn('Failed to update song view score:', error);
+      markSongPagePartialError();
     });
 }
 

@@ -9,6 +9,7 @@ async function loadSong() {
   originalChordPro = '';
   autoScrollEstimateState.attempted = false;
   autoScrollEstimateState.inFlight = false;
+  setSongPageState(SONG_PAGE_STATE_LOADING);
 
   const titleEl = document.getElementById('title');
   const artistEl = document.getElementById('artist');
@@ -30,11 +31,14 @@ async function loadSong() {
     }
     sheetEl.textContent = 'artist または id が指定されていません。';
     setStatus('Stopped · URL パラメータ不足', 'warn');
+    setSongPageState(SONG_PAGE_STATE_FATAL_ERROR);
     return;
   }
 
+  window.ChordWikiStorageKeys?.migrateSongStorage?.({ artist, id });
   autoScrollState.storageKey = getSongStorageKey(artist, id);
   songPrefsStorageKey = getSongPrefsStorageKey(artist, id);
+  songTransposeStorageKey = getSongTransposeStorageKey(id);
   loadSongPreferences();
   updateTransposeDisplay();
 
@@ -63,6 +67,7 @@ async function loadSong() {
       }
       sheetEl.textContent = '指定された曲が見つかりませんでした。';
       setStatus('Stopped · 曲が見つかりません', 'warn');
+      setSongPageState(SONG_PAGE_STATE_FATAL_ERROR);
       return;
     }
 
@@ -78,8 +83,10 @@ async function loadSong() {
     if (!renderLoadedSong(song, artist, id)) {
       throw new Error('Failed to render loaded song.');
     }
-
-    trackSongView(artist, id);
+    setSongPageState(SONG_PAGE_STATE_READY);
+    window.setTimeout(() => {
+      trackSongView(artist, id);
+    }, 1000);
   } catch (error) {
     console.error('Error loading song:', error);
 
@@ -95,6 +102,7 @@ async function loadSong() {
     }
     sheetEl.textContent = '曲の読み込み中にエラーが発生しました。';
     setStatus('Stopped · 読み込みエラー', 'warn');
+    setSongPageState(SONG_PAGE_STATE_FATAL_ERROR);
   }
 }
 

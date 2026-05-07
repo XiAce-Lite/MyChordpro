@@ -16,6 +16,26 @@
 
   const songs = [
     {
+      id: 'local-sync-check',
+      artist: 'Local QA Team',
+      title: '同期確認用サンプル（状態保存）',
+      slug: 'local-sync-check',
+      tags: ['local', 'sync', 'state', 'mcp', 'test'],
+      score: 48,
+      display_score: 47,
+      last_viewed_at: null
+    },
+    {
+      id: 'local-edit-normalize',
+      artist: 'Local Editor Lab',
+      title: '編集正規化テスト曲',
+      slug: 'local-edit-normalize',
+      tags: ['local', 'edit', 'normalize', 'tag', 'youtube'],
+      score: 44,
+      display_score: 43,
+      last_viewed_at: null
+    },
+    {
       id: 'local-long-scroll-sample',
       artist: 'Local Sample Choir',
       title: '巡る灯りのロングロード',

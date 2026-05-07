@@ -20,6 +20,7 @@
     }
 
     return normalized
+      .replace(/\s+/g, '\n')
       .split('\n')
       .map((tag) => tag.trim())
       .filter(Boolean);

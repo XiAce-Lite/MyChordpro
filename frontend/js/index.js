@@ -20,6 +20,10 @@ const DEFAULT_PAGE_SIZE = 30;
     const SONG_SEARCH_TARGET = 'song';
     const TAG_SEARCH_TARGET = 'tag';
     const TAG_SUGGEST_LIMIT = 10;
+    const TOP_STATE_IDLE = 'idle';
+    const TOP_STATE_LOADING = 'loading';
+    const TOP_STATE_READY = 'ready';
+    const TOP_STATE_ERROR = 'error';
     const LOCAL_TEST_SONGS_SCRIPT_PATH = './.local/local-test-songs.js';
     const LOCAL_TEST_SONGS_GLOBAL_KEY = '__LOCAL_TEST_SONGS__';
     const searchInput = document.getElementById('search');
@@ -34,6 +38,7 @@ const DEFAULT_PAGE_SIZE = 30;
     const localSamplePanel = document.getElementById('local-sample-panel');
     const localSampleLinks = document.getElementById('local-sample-links');
     let currentPageSize = DEFAULT_PAGE_SIZE;
+    let topPageState = TOP_STATE_IDLE;
     let suggestRequestSerial = 0;
     let suggestHideTimer = 0;
     let resizeDebounceTimer = 0;
@@ -295,7 +300,7 @@ function isLocalPreview() {
       return normalizeSearchTarget(params.get('target'));
     }
 
-    function updatePageUrl(page, query = '', target = SONG_SEARCH_TARGET) {
+    function syncPageUrl(page, query = '', target = SONG_SEARCH_TARGET, { replace = false } = {}) {
       const url = new URL(window.location.href);
       const safeQuery = String(query || '').trim();
       const safeTarget = normalizeSearchTarget(target);
@@ -322,7 +327,70 @@ function isLocalPreview() {
         url.searchParams.delete('page');
       }
 
-      window.history.replaceState({}, '', url);
+      if (replace) {
+        window.history.replaceState({}, '', url);
+      } else {
+        window.history.pushState({}, '', url);
+      }
+    }
+
+    function setTopPageState(nextState) {
+      topPageState = nextState;
+      const songList = document.getElementById('song-list');
+      if (!songList) {
+        return;
+      }
+      songList.dataset.state = nextState;
+    }
+
+    function renderTopPageLoading() {
+      const songList = document.getElementById('song-list');
+      if (!songList) {
+        return;
+      }
+      songList.textContent = '読み込み中...';
+    }
+
+    function renderTopPageError(message, retryHandler) {
+      const songList = document.getElementById('song-list');
+      if (!songList) {
+        return;
+      }
+
+      songList.innerHTML = '';
+
+      const container = document.createElement('div');
+      container.style.padding = '14px';
+      container.style.display = 'grid';
+      container.style.gap = '10px';
+      container.style.textAlign = 'left';
+
+      const banner = document.createElement('div');
+      banner.style.background = '#fff4f4';
+      banner.style.border = '1px solid #f3c7c7';
+      banner.style.borderRadius = '8px';
+      banner.style.padding = '10px 12px';
+      banner.style.color = '#7b1c1c';
+      banner.textContent = message || 'データ取得に失敗しました。';
+
+      const retryButton = document.createElement('button');
+      retryButton.type = 'button';
+      retryButton.textContent = '再試行';
+      retryButton.style.width = 'fit-content';
+      retryButton.style.padding = '8px 14px';
+      retryButton.style.border = '1px solid #c8d1dc';
+      retryButton.style.borderRadius = '8px';
+      retryButton.style.background = '#fff';
+      retryButton.style.cursor = 'pointer';
+      retryButton.addEventListener('click', () => {
+        if (typeof retryHandler === 'function') {
+          retryHandler();
+        }
+      });
+
+      container.appendChild(banner);
+      container.appendChild(retryButton);
+      songList.appendChild(container);
     }
 
     function hideTagSuggestions() {
@@ -370,7 +438,7 @@ function isLocalPreview() {
         button.addEventListener('click', () => {
           searchInput.value = tag;
           hideTagSuggestions();
-          loadSongs(1, tag, TAG_SEARCH_TARGET);
+          loadSongs(1, tag, TAG_SEARCH_TARGET, { historyMode: 'push' });
         });
         searchSuggest.appendChild(button);
       });
@@ -461,8 +529,7 @@ function isLocalPreview() {
 
       updateSearchUiForTarget(SONG_SEARCH_TARGET);
       updateSearchState('', SONG_SEARCH_TARGET);
-      updatePageUrl(1, '', SONG_SEARCH_TARGET);
-      loadSongs(1, '', SONG_SEARCH_TARGET);
+      loadSongs(1, '', SONG_SEARCH_TARGET, { historyMode: 'push' });
     }
 
     function updateSearchUiForTarget(target = SONG_SEARCH_TARGET) {
@@ -504,7 +571,7 @@ function isLocalPreview() {
 
       if (!disabled && !isActive) {
         button.addEventListener('click', () => {
-          loadSongs(targetPage, appliedQuery, safeTarget);
+          loadSongs(targetPage, appliedQuery, safeTarget, { historyMode: 'push' });
         });
       }
 
@@ -575,7 +642,7 @@ function isLocalPreview() {
           searchInput.value = tag;
         }
         hideTagSuggestions();
-        loadSongs(1, tag, TAG_SEARCH_TARGET);
+        loadSongs(1, tag, TAG_SEARCH_TARGET, { historyMode: 'push' });
       });
       return button;
     }
@@ -665,7 +732,13 @@ function isLocalPreview() {
       });
     }
 
-    async function loadSongs(page = getPageFromUrl(), query = getQueryFromUrl(), target = getTargetFromUrl()) {
+    async function loadSongs(
+      page = getPageFromUrl(),
+      query = getQueryFromUrl(),
+      target = getTargetFromUrl(),
+      options = {}
+    ) {
+      const { historyMode = 'replace' } = options;
       const appliedQuery = String(query || '').trim();
       const safeTarget = normalizeSearchTarget(target);
       const rankingMode = isRankingMode(appliedQuery, safeTarget);
@@ -685,7 +758,8 @@ function isLocalPreview() {
         ? `/api/songs-search?q=${encodeURIComponent(appliedQuery)}&page=${safePage}&target=${encodeURIComponent(safeTarget)}&pageSize=${requestPageSize}`
         : `/api/songs-ranking?page=${safePage}&pageSize=${requestPageSize}`);
 
-      songList.textContent = 'Loading...';
+      setTopPageState(TOP_STATE_LOADING);
+      renderTopPageLoading();
 
       try {
         const response = await fetch(endpoint, {
@@ -716,13 +790,18 @@ function isLocalPreview() {
         currentPageSize = effectivePageSize;
 
         if (safePage > availablePages) {
-          loadSongs(availablePages, appliedQuery, safeTarget);
+          loadSongs(availablePages, appliedQuery, safeTarget, { historyMode: 'replace' });
           return;
         }
 
         renderSongs(songs, safePage, appliedQuery, effectivePageSize);
         renderPagination(safePage, totalSongs, appliedQuery, safeTarget, effectivePageSize);
-        updatePageUrl(safePage, appliedQuery, safeTarget);
+        setTopPageState(TOP_STATE_READY);
+        if (historyMode === 'replace') {
+          syncPageUrl(safePage, appliedQuery, safeTarget, { replace: true });
+        } else if (historyMode === 'push') {
+          syncPageUrl(safePage, appliedQuery, safeTarget, { replace: false });
+        }
       } catch (error) {
         console.error('Error loading songs:', error);
 
@@ -746,19 +825,26 @@ function isLocalPreview() {
           currentPageSize = effectivePageSize;
 
           if (safePage > availablePages) {
-            loadSongs(availablePages, appliedQuery, safeTarget);
+            loadSongs(availablePages, appliedQuery, safeTarget, { historyMode: 'replace' });
             return;
           }
 
           renderSongs(localPayload.songs, safePage, appliedQuery, effectivePageSize);
           renderPagination(safePage, totalSongs, appliedQuery, safeTarget, effectivePageSize);
-          updatePageUrl(safePage, appliedQuery, safeTarget);
+          setTopPageState(TOP_STATE_READY);
+          if (historyMode === 'replace') {
+            syncPageUrl(safePage, appliedQuery, safeTarget, { replace: true });
+          } else if (historyMode === 'push') {
+            syncPageUrl(safePage, appliedQuery, safeTarget, { replace: false });
+          }
           return;
         }
 
-        songList.textContent = appliedQuery
-          ? '検索結果の読み込みに失敗しました。'
-          : 'ランキングの読み込みに失敗しました。';
+        setTopPageState(TOP_STATE_ERROR);
+        renderTopPageError(
+          appliedQuery ? '検索結果の読み込みに失敗しました。' : 'ランキングの読み込みに失敗しました。',
+          () => loadSongs(safePage, appliedQuery, safeTarget, { historyMode: 'replace' })
+        );
         renderPagination(safePage, 0, appliedQuery, safeTarget, pageSize);
       }
     }
@@ -766,7 +852,7 @@ function isLocalPreview() {
     searchForm.addEventListener('submit', (event) => {
       event.preventDefault();
       hideTagSuggestions();
-      loadSongs(1, searchInput.value, searchTarget?.value);
+      loadSongs(1, searchInput.value, searchTarget?.value, { historyMode: 'push' });
     });
 
     searchClear?.addEventListener('click', () => {
@@ -812,7 +898,7 @@ function isLocalPreview() {
     });
 
     window.addEventListener('popstate', () => {
-      loadSongs(getPageFromUrl(), getQueryFromUrl(), getTargetFromUrl());
+      loadSongs(getPageFromUrl(), getQueryFromUrl(), getTargetFromUrl(), { historyMode: 'none' });
     });
 
     window.addEventListener('resize', () => {
@@ -823,7 +909,7 @@ function isLocalPreview() {
       resizeDebounceTimer = window.setTimeout(() => {
         const { changed } = syncPageSizeWithViewport();
         if (changed) {
-          loadSongs(getPageFromUrl(), getQueryFromUrl(), getTargetFromUrl());
+          loadSongs(getPageFromUrl(), getQueryFromUrl(), getTargetFromUrl(), { historyMode: 'replace' });
         } else {
           updatePaginationSafeSpace();
         }
@@ -834,5 +920,6 @@ function isLocalPreview() {
       updateSearchUiForTarget(getTargetFromUrl());
       syncPageSizeWithViewport();
       renderLocalSamplePanel();
-      loadSongs(getPageFromUrl(), getQueryFromUrl(), getTargetFromUrl());
+      setTopPageState(TOP_STATE_IDLE);
+      loadSongs(getPageFromUrl(), getQueryFromUrl(), getTargetFromUrl(), { historyMode: 'replace' });
     });

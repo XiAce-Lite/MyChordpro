@@ -249,11 +249,38 @@ function updateAutoScrollSpeedUi() {
   }
 }
 
+function loadGlobalAutoScrollSpeedMultiplier() {
+  const key = window.ChordWikiStorageKeys?.MCP_SCROLL_SPEED_KEY;
+  if (!key) {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(key);
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveGlobalAutoScrollSpeedMultiplier(value) {
+  const key = window.ChordWikiStorageKeys?.MCP_SCROLL_SPEED_KEY;
+  if (!key) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // noop
+  }
+}
+
 function setAutoScrollSpeedMultiplier(value, { persist = true, notify = true } = {}) {
   const roundedValue = Math.round((Number(value) || 1) * 100) / 100;
   const nextMultiplier = clamp(roundedValue, AUTO_SCROLL_SPEED_MIN_MULTIPLIER, AUTO_SCROLL_SPEED_MAX_MULTIPLIER);
   autoScrollState.speedMultiplier = nextMultiplier;
   updateAutoScrollSpeedUi();
+  saveGlobalAutoScrollSpeedMultiplier(nextMultiplier);
 
   if (persist && autoScrollState.storageKey) {
     saveAutoScrollState({ notify: false });
@@ -637,6 +664,14 @@ function restoreAutoScrollState() {
   autoScrollState.endY = defaults.endY;
   autoScrollState.durationSec = DEFAULT_DURATION_SEC;
   autoScrollState.speedMultiplier = 1;
+  const globalSpeedMultiplier = loadGlobalAutoScrollSpeedMultiplier();
+  if (Number.isFinite(globalSpeedMultiplier)) {
+    autoScrollState.speedMultiplier = clamp(
+      Number(globalSpeedMultiplier),
+      AUTO_SCROLL_SPEED_MIN_MULTIPLIER,
+      AUTO_SCROLL_SPEED_MAX_MULTIPLIER
+    );
+  }
   autoScrollState.variableScrollEnabled = true;
 
   if (autoScrollState.storageKey) {

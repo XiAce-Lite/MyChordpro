@@ -53,10 +53,18 @@ function getSongAnnotationIdentity({ artist, id } = {}) {
 }
 
 function getStickyNotesStorageKey(artist = '', id = '') {
+  const byId = window.ChordWikiStorageKeys?.getNotesStorageKey?.(id);
+  if (byId) {
+    return byId;
+  }
   return window.ChordWikiStorageKeys.buildSongScopedKey(STICKY_NOTES_STORAGE_PREFIX, artist, id);
 }
 
 function getInkStorageKey(artist = '', id = '') {
+  const byId = window.ChordWikiStorageKeys?.getCanvasStorageKey?.(id);
+  if (byId) {
+    return byId;
+  }
   return window.ChordWikiStorageKeys.buildSongScopedKey(INK_STORAGE_PREFIX, artist, id);
 }
 

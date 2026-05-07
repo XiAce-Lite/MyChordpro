@@ -414,6 +414,56 @@
   };
 
   const songs = [longScrollSong, longLineSong, seventhMoonSong];
+  songs.unshift(
+    {
+      id: 'local-sync-check',
+      artist: 'Local QA Team',
+      title: '同期確認用サンプル（状態保存）',
+      slug: 'local-sync-check',
+      key: 'D',
+      tags: ['local', 'sync', 'state', 'mcp', 'test'],
+      youtube: [
+        { id: 'mz5huG6uKUM', start: 42 },
+        { id: 'uM032eA9HD0', start: 75 }
+      ],
+      score: 48,
+      display_score: 47,
+      last_viewed_at: null,
+      chordPro: `{title: 同期確認用サンプル（状態保存）}
+{subtitle: Local QA Team}
+{key: D}
+{comment: Verse}
+| [D]きょうの [A/C#]てすと | [Bm7]そっと [F#m7]はじめる |
+| [G]おりたたみ [D/F#]ひらいて | [Em7]じょうたい [A7]たしかめる |
+{comment: Chorus}
+| [Dmaj7]きーを [A/C#]きりかえ | [Bm7]いちを [F#m7]おぼえる |
+| [Gadd9]すくろーる [D/F#]ながして | [Em7]つぎの [A7]きょくへ |
+`
+    },
+    {
+      id: 'local-edit-normalize',
+      artist: 'Local Editor Lab',
+      title: '編集正規化テスト曲',
+      slug: 'local-edit-normalize',
+      key: 'C',
+      tags: ['local', 'edit', 'normalize', 'tag', 'youtube'],
+      youtube: [
+        { id: 'mz5huG6uKUM', start: 0 },
+        { id: 'uM032eA9HD0', start: 15 }
+      ],
+      score: 44,
+      display_score: 43,
+      last_viewed_at: null,
+      chordPro: `{title: 編集正規化テスト曲}
+{subtitle: Local Editor Lab}
+{key: C}
+{comment: Intro}
+| [C]たぐの [G/B]せいり | [Am7]ゆーちゅーぶ [Em7]せいり |
+{comment: Verse}
+| [Fmaj7]くうはく [C/E]のこさず | [Dm7]ほぞんを [G7]かくにん |
+`
+    }
+  );
 
   for (let round = 0; round < 3; round += 1) {
     seedSongs.forEach((seed, index) => {

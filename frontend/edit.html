@@ -21,7 +21,7 @@
     }
 
     .page {
-      max-width: 860px;
+      max-width: 1760px;
       margin: 0 auto;
       padding: 24px 16px 40px;
     }
@@ -68,6 +68,41 @@
       margin-bottom: 16px;
     }
 
+    .form-top-pane .field {
+      margin-bottom: 8px;
+    }
+
+    .form-top-pane {
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+    }
+
+    .form-top-left,
+    .form-top-right {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+
+    .form-top-pane .field.inline-field {
+      display: grid;
+      grid-template-columns: 180px minmax(0, 1fr);
+      align-items: center;
+      column-gap: 12px;
+    }
+
+    .form-top-pane .field.inline-field > label {
+      margin-bottom: 0;
+    }
+
+    .form-top-pane .field.inline-field.top-aligned {
+      align-items: flex-start;
+    }
+
+    .form-top-pane .field.inline-field.top-aligned > label {
+      padding-top: 10px;
+    }
+
     label {
       display: block;
       margin-bottom: 8px;
@@ -85,7 +120,7 @@
       display: flex;
       justify-content: space-between;
       gap: 12px;
-      margin: -2px 0 8px;
+      margin: 0 0 6px;
       flex-wrap: wrap;
       font-size: 12px;
       color: #607080;
@@ -125,6 +160,255 @@
 
     #chordPro {
       min-height: 320px;
+      font-size: 13px;
+      /* CodeMirror 6 により非表示になるため、フォント指定は chordpro-cm6.js 側の theme で管理 */
+      display: none;
+    }
+
+    #chordpro-cm6 {
+      min-height: 320px;
+    }
+
+    #chordpro-cm6 .cm-editor {
+      height: 100%;
+      max-height: 100%;
+      overflow: hidden;
+    }
+
+    #chordpro-cm6 .cm-scroller {
+      height: 100%;
+      overflow: auto;
+    }
+
+    .form-top-pane #tags,
+    .form-top-pane #youtube {
+      min-height: calc(1.5em * 3 + 20px);
+      height: calc(1.5em * 3 + 20px);
+      max-height: calc(1.5em * 3 + 20px);
+      resize: none;
+      overflow-y: auto;
+    }
+
+    .youtube-control {
+      min-width: 0;
+    }
+
+    .editor-preview-wrapper {
+      display: flex;
+      gap: 0;
+      margin-top: 10px;
+      align-items: stretch;
+    }
+
+    .editor-resizer {
+      flex: 0 0 10px;
+      cursor: col-resize;
+      background: transparent;
+      position: relative;
+      z-index: 1;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .editor-resizer::after {
+      content: '';
+      display: block;
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 4px;
+      border-radius: 2px;
+      background: #cfd8e3;
+      transition: background 0.15s;
+    }
+
+    .editor-resizer:hover::after,
+    .editor-resizer.dragging::after {
+      background: #0078d4;
+    }
+
+    .editor-pane,
+    .preview-pane {
+      flex: 1 1 0;
+      min-width: 0;
+      border: 1px solid #cfd8e3;
+      border-radius: 8px;
+      background: #f7f9fc;
+      padding: 10px 12px;
+      box-sizing: border-box;
+    }
+
+    .editor-pane .field {
+      margin-bottom: 0;
+    }
+
+    .editor-pane label {
+      margin-bottom: 6px;
+    }
+
+    .preview-pane-label {
+      color: #607080;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .preview-content {
+      min-height: 360px;
+      max-height: 70vh;
+      border: 1px solid #cfd8e3;
+      border-radius: 6px;
+      background: #fff;
+      overflow-y: auto;
+      box-sizing: border-box;
+      padding: 10px;
+      font-size: 13px;
+    }
+
+    .preview-content .preview-song-header {
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #dce8f5;
+    }
+
+    .preview-content .preview-song-title {
+      font-family: "Hiragino Sans", "BIZ UDPGothic", "Yu Gothic UI", "Noto Sans JP", "Segoe UI", sans-serif;
+      font-size: 1.4em;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: 0.01em;
+      text-align: center;
+      white-space: normal;
+      word-break: break-word;
+      margin: 0;
+      color: #222;
+    }
+
+    .preview-content .preview-song-subtitle {
+      font-size: 0.9em;
+      text-align: center;
+      color: #333;
+      margin-top: 4px;
+    }
+
+    .preview-content .preview-song-key {
+      display: block;
+      font-size: inherit;
+      font-weight: 700;
+      color: #dc143c;
+      text-align: left;
+      margin: 6px 0 14px;
+    }
+
+    .preview-content .line {
+      position: relative;
+      padding-top: 1.6em;
+      margin: 0 0 0.4em;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+
+    .preview-content .comment {
+      display: block;
+      margin-top: 0.4em;
+      margin-bottom: 1.2em;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.6;
+    }
+
+    .preview-content .comment .comment-body {
+      display: inline-block;
+      max-width: 100%;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background-color: #e6e6e6;
+      box-sizing: border-box;
+      white-space: pre-wrap;
+      font-weight: 700;
+      color: #444;
+    }
+
+    .preview-content .comment.ci .comment-body {
+      font-style: italic;
+    }
+
+    .preview-content .line.blank {
+      padding-top: 0;
+      min-height: 0.8em;
+      margin-bottom: 0.6em;
+    }
+
+    .preview-content .chord {
+      display: inline-block;
+      position: relative;
+      top: -1.5em;
+      font-size: 0.9em;
+      font-weight: 700;
+      line-height: 1;
+      color: #0b65c2;
+      white-space: pre;
+      vertical-align: baseline;
+      margin-right: 0.2em;
+    }
+
+    .preview-content .chord sup {
+      font-size: 0.78em;
+      line-height: 1;
+      vertical-align: super;
+    }
+
+    .preview-content .word,
+    .preview-content .wordtop {
+      white-space: pre-wrap;
+    }
+
+    .preview-content .cw-chord-affix,
+    .preview-content .cw-chord-mid,
+    .preview-content .cw-chord-accidental {
+      color: inherit;
+      font-size: 0.92em;
+    }
+
+    .preview-content sup {
+      line-height: 0;
+      font-size: 0.78em;
+      vertical-align: super;
+    }
+
+    @media (max-width: 1200px) {
+      .form-top-pane .field.inline-field {
+        grid-template-columns: 150px minmax(0, 1fr);
+      }
+
+      .form-top-pane {
+        gap: 12px;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .form-top-pane {
+        display: block;
+      }
+
+      .form-top-left,
+      .form-top-right {
+        width: 100%;
+      }
+
+      .form-top-pane .field.inline-field {
+        display: block;
+      }
+
+      .form-top-pane .field.inline-field > label {
+        margin-bottom: 4px;
+      }
+
+      .editor-preview-wrapper {
+        flex-direction: column;
+      }
     }
 
     .button-row {
@@ -132,6 +416,7 @@
       gap: 10px;
       flex-wrap: wrap;
       align-items: center;
+      margin-top: 10px;
     }
 
     button {
@@ -180,6 +465,19 @@
     [hidden] {
       display: none !important;
     }
+
+    .preview-content span.male,
+    .preview-content span.male2,
+    .preview-content span.female,
+    .preview-content span.female2 {
+      display: inline;
+      font-weight: 900;
+    }
+
+    .preview-content span.male   { color: #0000cd; }
+    .preview-content span.male2  { color: #006400; }
+    .preview-content span.female { color: #ff1493; }
+    .preview-content span.female2 { color: #ff8c00; }
   </style>
 </head>
 <body>
@@ -193,43 +491,62 @@
       <div id="loading" class="loading">初期化しています...</div>
 
       <form id="song-form" hidden novalidate>
-        <div class="field">
-          <label for="song-id">ID<span class="hint">edit時は固定</span></label>
-          <input type="text" id="song-id" name="id" readonly>
-        </div>
+        <div class="form-top-pane">
+          <div class="form-top-left">
+            <div class="field inline-field">
+              <label for="song-id">ID<span class="hint">edit時は固定</span></label>
+              <input type="text" id="song-id" name="id" readonly>
+            </div>
 
-        <div class="field">
-          <label for="title">曲名</label>
-          <input type="text" id="title" name="title" required>
-        </div>
+            <div class="field inline-field">
+              <label for="title">曲名</label>
+              <input type="text" id="title" name="title" required>
+            </div>
 
-        <div class="field">
-          <label for="slug">URL用ID</label>
-          <input type="text" id="slug" name="slug" required>
-        </div>
+            <div class="field inline-field">
+              <label for="slug">URL用ID</label>
+              <input type="text" id="slug" name="slug" required>
+            </div>
 
-        <div class="field">
-          <label for="artist">アーティスト</label>
-          <input type="text" id="artist" name="artist" required>
-        </div>
-
-        <div class="field">
-          <label for="tags">タグ<span class="hint">任意 / 1行に1タグ</span></label>
-          <textarea id="tags" name="tags" placeholder="pop&#10;live"></textarea>
-        </div>
-
-        <div class="field">
-          <label for="youtube">YouTube<span class="hint">任意 / 1行に1動画</span></label>
-          <div class="youtube-meta">
-            <span class="youtube-prefix">https://www.youtube.com/watch?v=</span>
-            <span class="youtube-help">例：kZZstk3dGvQ?t=42 または kZZstk3dGvQ start=42</span>
+            <div class="field inline-field">
+              <label for="artist">アーティスト</label>
+              <input type="text" id="artist" name="artist" required>
+            </div>
           </div>
-          <textarea id="youtube" name="youtube" placeholder="kZZstk3dGvQ&#10;kZZstk3dGvQ?t=42&#10;https://youtu.be/dQw4w9WgXcQ?t=0"></textarea>
+
+          <div class="form-top-right">
+            <div class="field inline-field top-aligned">
+              <label for="tags">タグ<span class="hint">任意 / 1行に1タグ</span></label>
+              <textarea id="tags" name="tags" rows="3" placeholder="pop&#10;live"></textarea>
+            </div>
+
+            <div class="field inline-field top-aligned">
+              <label for="youtube">YouTube<span class="hint">任意 / 1行に1動画</span></label>
+              <div class="youtube-control">
+                <div class="youtube-meta">
+                  <span class="youtube-prefix">https://www.youtube.com/watch?v=</span>
+                  <span class="youtube-help">例：kZZstk3dGvQ?t=42 または kZZstk3dGvQ start=42</span>
+                </div>
+                <textarea id="youtube" name="youtube" rows="3" placeholder="kZZstk3dGvQ&#10;kZZstk3dGvQ?t=42&#10;https://youtu.be/dQw4w9WgXcQ?t=0"></textarea>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="field">
-          <label for="chordPro">本文</label>
-          <textarea id="chordPro" name="chordPro" required></textarea>
+        <div class="editor-preview-wrapper">
+          <div class="editor-pane">
+            <div class="field">
+              <label for="chordPro">本文</label>
+              <textarea id="chordPro" name="chordPro" required></textarea>
+            </div>
+          </div>
+
+          <div class="editor-resizer" id="editor-resizer" aria-hidden="true"></div>
+
+          <div class="preview-pane" aria-hidden="true">
+            <div class="preview-pane-label">プレビュー</div>
+            <div id="preview-pane-content" class="preview-content"></div>
+          </div>
         </div>
 
         <div class="button-row">
@@ -243,10 +560,25 @@
     </div>
   </div>
 
+  <script type="importmap">
+  {
+    "imports": {
+      "@codemirror/state":    "https://esm.sh/@codemirror/state@6",
+      "@codemirror/view":     "https://esm.sh/@codemirror/view@6?external=@codemirror/state,@lezer/common",
+      "@codemirror/commands": "https://esm.sh/@codemirror/commands@6?external=@codemirror/state,@codemirror/view,@lezer/common",
+      "@codemirror/language": "https://esm.sh/@codemirror/language@6?external=@codemirror/state,@lezer/common,@lezer/highlight,@lezer/lr",
+      "@lezer/common":        "https://esm.sh/@lezer/common@1",
+      "@lezer/highlight":     "https://esm.sh/@lezer/highlight@1?external=@lezer/common",
+      "@lezer/lr":            "https://esm.sh/@lezer/lr@1?external=@lezer/common"
+    }
+  }
+  </script>
   <script src="js/runtime-config.js?v=20260410-refactor1"></script>
   <script src="js/shared/api.js?v=20260410-refactor1"></script>
   <script src="js/shared/song-utils.js?v=20260411-youtubevalidation1"></script>
   <script src="js/shared/id.js?v=20260410-refactor1"></script>
-  <script src="js/edit.js?v=20260411-youtubevalidation1"></script>
+  <script src="js/chordwiki-render.js?v=20260508-edit-cm6"></script>
+  <script type="module" src="js/chordpro-cm6.js?v=20260508-edit-cm6"></script>
+  <script defer src="js/edit.js?v=20260508-edit-cm6"></script>
 </body>
 </html>

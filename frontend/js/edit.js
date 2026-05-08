@@ -15,6 +15,8 @@ const artistInput = document.getElementById('artist');
 const tagsInput = document.getElementById('tags');
 const youtubeInput = document.getElementById('youtube');
 const chordProInput = document.getElementById('chordPro');
+const previewPaneContentEl = document.getElementById('preview-pane-content');
+let triggerChordProPreview = () => {};
 
 const params = new URLSearchParams(window.location.search);
 const requestedMode = (params.get('mode') || 'add').toLowerCase();
@@ -72,6 +74,7 @@ function setFormDisabled(disabled) {
 
   submitButton.disabled = disabled;
   cancelButton.disabled = disabled;
+  window.ChordProEditor?.setDisabled(disabled);
 }
 
 function updatePageMeta() {
@@ -101,7 +104,12 @@ function populateForm(song) {
   artistInput.value = song.artist || '';
   tagsInput.value = Array.isArray(song.tags) ? song.tags.join('\n') : '';
   youtubeInput.value = formatYoutubeEntries(song.youtube);
-  chordProInput.value = normalizeTextBlock(song.chordPro || '');
+  const text = normalizeTextBlock(song.chordPro || '');
+  if (window.ChordProEditor) {
+    window.ChordProEditor.setValue(text);
+  } else {
+    chordProInput.value = text;
+  }
 }
 
 function initializeAddMode() {
@@ -110,6 +118,7 @@ function initializeAddMode() {
   setFormVisible(true);
   setLoading(false);
   showMessage('add モードです。必要事項を入力してください。');
+  triggerChordProPreview({ immediate: true });
 }
 
 async function loadSongForEdit() {
@@ -142,6 +151,8 @@ async function loadSongForEdit() {
     }
 
     populateForm(body || {});
+    window.ChordWikiEditorHighlight?.render();
+    triggerChordProPreview({ immediate: true });
     setFormVisible(true);
     showMessage('edit モードでデータを読み込みました。');
   } catch (error) {
@@ -224,7 +235,9 @@ async function handleSubmit(event) {
   const title = titleInput.value.trim();
   const slug = slugInput.value.trim();
   const artist = artistInput.value.trim();
-  const chordPro = normalizeTextBlock(chordProInput.value).trim();
+  const chordPro = normalizeTextBlock(
+    window.ChordProEditor ? window.ChordProEditor.getValue() : chordProInput.value
+  ).trim();
   const tags = normalizeTagsInput(tagsInput.value);
   const youtubeErrors = validateYoutubeTextarea(youtubeInput.value);
   const youtube = parseYoutubeTextarea(youtubeInput.value);
@@ -315,6 +328,192 @@ function handleCancel() {
   window.location.href = '/';
 }
 
+function setupChordProLivePreview() {
+  if (!previewPaneContentEl || typeof renderChordWikiLike !== 'function') {
+    return;
+  }
+  if (!window.ChordProEditor && !chordProInput) {
+    return;
+  }
+
+  if (!window.displayPrefsState || typeof window.displayPrefsState !== 'object') {
+    window.displayPrefsState = {};
+  }
+  if (typeof window.displayPrefsState.superscriptEnabled !== 'boolean') {
+    window.displayPrefsState.superscriptEnabled = true;
+  }
+
+  let debounceTimer = 0;
+
+  const renderPreview = () => {
+    const rawText = window.ChordProEditor
+      ? window.ChordProEditor.getValue()
+      : (chordProInput ? chordProInput.value : '');
+    const text = normalizeTextBlock(rawText || '');
+
+    try {
+      const info = renderChordWikiLike(text, previewPaneContentEl);
+      const displayTitle = info.title || (titleInput ? titleInput.value.trim() : '');
+      const displaySubtitle = info.subtitle || '';
+      const displayKey = info.key || '';
+      if (displayTitle || displaySubtitle || displayKey) {
+        const header = document.createElement('div');
+        header.className = 'preview-song-header';
+        if (displayTitle) {
+          const h = document.createElement('div');
+          h.className = 'preview-song-title';
+          h.textContent = displayTitle;
+          header.appendChild(h);
+        }
+        if (displaySubtitle) {
+          const s = document.createElement('div');
+          s.className = 'preview-song-subtitle';
+          s.textContent = displaySubtitle;
+          header.appendChild(s);
+        }
+        if (displayKey) {
+          const k = document.createElement('div');
+          k.className = 'preview-song-key';
+          k.textContent = 'Key: ' + displayKey;
+          header.appendChild(k);
+        }
+        previewPaneContentEl.insertBefore(header, previewPaneContentEl.firstChild);
+      }
+      syncPreviewPaneHeight();
+    } catch (error) {
+      const detail = String(error?.message || error || 'プレビューの描画に失敗しました。');
+      previewPaneContentEl.innerHTML = `<div style="color:red; white-space:pre;">${detail}</div>`;
+      syncPreviewPaneHeight();
+    }
+  };
+
+  const syncPreviewPaneHeight = () => {
+    const editorEl = document.getElementById('chordpro-cm6') || chordProInput;
+    if (!editorEl) return;
+
+    if (state.mode !== 'edit') {
+      editorEl.style.height = '';
+      previewPaneContentEl.style.height = '';
+      return;
+    }
+
+    if (window.innerWidth <= 900) {
+      editorEl.style.height = '';
+      previewPaneContentEl.style.height = '';
+      return;
+    }
+
+    const scrollerEl = editorEl.querySelector('.cm-scroller');
+    const savedScrollTop = scrollerEl ? scrollerEl.scrollTop : 0;
+
+    editorEl.style.height = '';
+    previewPaneContentEl.style.height = '';
+
+    const targetHeight = Math.max(editorEl.scrollHeight, previewPaneContentEl.scrollHeight, 360);
+    const cappedHeight = Math.min(targetHeight, Math.floor(window.innerHeight * 0.56));
+
+    editorEl.style.height = `${cappedHeight}px`;
+    previewPaneContentEl.style.height = `${cappedHeight}px`;
+
+    if (scrollerEl) scrollerEl.scrollTop = savedScrollTop;
+  };
+
+  const schedulePreview = () => {
+    if (debounceTimer) {
+      window.clearTimeout(debounceTimer);
+    }
+
+    debounceTimer = window.setTimeout(() => {
+      renderPreview();
+    }, 300);
+  };
+
+  triggerChordProPreview = ({ immediate = false } = {}) => {
+    if (immediate) {
+      if (debounceTimer) {
+        window.clearTimeout(debounceTimer);
+      }
+      renderPreview();
+      return;
+    }
+
+    schedulePreview();
+  };
+
+  if (window.ChordProEditor) {
+    window.ChordProEditor.onChange(() => {
+      triggerChordProPreview({ immediate: false });
+    });
+  } else if (chordProInput) {
+    chordProInput.addEventListener('input', () => {
+      triggerChordProPreview({ immediate: false });
+    });
+  }
+
+  if (titleInput) {
+    titleInput.addEventListener('input', () => {
+      triggerChordProPreview({ immediate: false });
+    });
+  }
+
+  const FONT_SIZES = [10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24];
+  let previewFontIdx = FONT_SIZES.indexOf(13);
+
+  const applyPreviewFontSize = () => {
+    previewPaneContentEl.style.fontSize = FONT_SIZES[previewFontIdx] + 'px';
+  };
+
+  previewPaneContentEl.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    if (e.deltaY < 0) previewFontIdx = Math.min(previewFontIdx + 1, FONT_SIZES.length - 1);
+    else previewFontIdx = Math.max(previewFontIdx - 1, 0);
+    applyPreviewFontSize();
+  }, { passive: false });
+}
+
+function setupEditorResizer() {
+  const wrapper = document.querySelector('.editor-preview-wrapper');
+  const editorPane = document.querySelector('.editor-pane');
+  const previewPane = document.querySelector('.preview-pane');
+  const resizer = document.getElementById('editor-resizer');
+  if (!wrapper || !editorPane || !previewPane || !resizer) return;
+
+  let isDragging = false;
+  let startX = 0;
+  let startEditorW = 0;
+  let startPreviewW = 0;
+
+  resizer.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    startX = e.clientX;
+    startEditorW = editorPane.getBoundingClientRect().width;
+    startPreviewW = previewPane.getBoundingClientRect().width;
+    resizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const total = startEditorW + startPreviewW;
+    const newEditorW = Math.max(200, Math.min(startEditorW + dx, total - 200));
+    const newPreviewW = total - newEditorW;
+    editorPane.style.flex = `0 0 ${newEditorW}px`;
+    previewPane.style.flex = `0 0 ${newPreviewW}px`;
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    resizer.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   updatePageMeta();
 
@@ -323,10 +522,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   deleteButton.addEventListener('click', handleDelete);
   cancelButton.addEventListener('click', handleCancel);
   formEl.addEventListener('submit', handleSubmit);
+  setupEditorResizer();
 
-  if (state.mode === 'edit') {
-    await loadSongForEdit();
-  } else {
-    initializeAddMode();
+  async function waitForCm6AndSetup() {
+    for (let i = 0; i < 100; i++) {
+      if (window.ChordProEditor) break;
+      await new Promise(r => setTimeout(r, 50));
+    }
+    if (!window.ChordProEditor && chordProInput) {
+      chordProInput.style.display = '';
+      chordProInput.setAttribute('required', '');
+    }
+    setupChordProLivePreview();
+
+    if (state.mode === 'edit') {
+      await loadSongForEdit();
+    } else {
+      initializeAddMode();
+    }
   }
+
+  await waitForCm6AndSetup();
 });

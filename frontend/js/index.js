@@ -708,6 +708,7 @@ function isLocalPreview() {
       const songList = document.getElementById('song-list');
       const appliedQuery = String(query || '').trim();
       const safePageSize = clampPageSize(pageSize);
+      songList.removeAttribute('data-state');
       songList.innerHTML = '';
 
       if (!Array.isArray(songs) || songs.length === 0) {

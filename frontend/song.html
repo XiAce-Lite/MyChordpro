@@ -8,7 +8,8 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" media="(prefers-color-scheme: light)" />
   <link rel="icon" href="/favicon-dark.svg" type="image/svg+xml" sizes="any" media="(prefers-color-scheme: dark)" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@0..1" />
-  <link rel="stylesheet" href="css/chordwiki-song.css?v=20260412-annotations3" />
+  <link rel="stylesheet" href="css/setlists.css?v=20260508-mycp-setlists1" />
+  <link rel="stylesheet" href="css/chordwiki-song.css?v=20260508-autoscroll-focus1" />
 </head>
 <body>
   <div class="container">
@@ -23,11 +24,17 @@
 
     <div id="artist" class="song-artist"></div>
 
+    <div id="song-setlist-adder" class="song-setlist-adder editor-only" data-display="inline-block">
+      <button id="song-setlist-toggle" class="song-setlist-toggle" type="button" data-role="setlist-toggle" aria-expanded="false">セットリストに追加 ▼</button>
+      <div id="song-setlist-panel" class="song-setlist-panel" data-role="setlist-panel" hidden></div>
+    </div>
+
     <div class="song-layout">
       <div class="song-main-column">
         <div class="sheet-stage">
           <div id="key" class="song-key"></div>
           <div id="sheet" class="cw-sheet"></div>
+          <div id="autoscroll-focus-overlay" class="autoscroll-focus-overlay" aria-hidden="true"></div>
           <div id="autoscroll-marker-layer" class="autoscroll-marker-layer" aria-hidden="true"></div>
         </div>
         <div class="song-bottom-nav">
@@ -134,10 +141,26 @@
             <div class="autoscroll-buttons">
               <button id="autoscroll-toggle" type="button">Start</button>
               <button id="autoscroll-markers-reset" type="button">↺ Marker</button>
-              <label class="autoscroll-variable-toggle" for="autoscroll-variable-toggle">
-                <input id="autoscroll-variable-toggle" type="checkbox" checked />
-                <span>可変スクロール</span>
-              </label>
+              <div class="autoscroll-toggle-stack">
+                <label class="autoscroll-variable-toggle" for="autoscroll-variable-toggle">
+                  <input id="autoscroll-variable-toggle" type="checkbox" checked />
+                  <span>可変スクロール</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="autoscroll-remaining-row">
+              <span>残り時間 <span id="autoscroll-remaining">--:--</span></span>
+              <div class="autoscroll-remaining-controls">
+                <label class="autoscroll-highlight-toggle" for="autoscroll-highlight-toggle">
+                  <input id="autoscroll-highlight-toggle" type="checkbox" checked />
+                  <span>ハイライト表示</span>
+                </label>
+                <label class="autoscroll-highlight-context-lines" for="autoscroll-highlight-context-lines">
+                  <span>前後行数</span>
+                  <input id="autoscroll-highlight-context-lines" type="number" min="2" max="6" step="1" value="4" inputmode="numeric" />
+                </label>
+              </div>
             </div>
           </div>
         </section>
@@ -314,6 +337,8 @@
   <script src="js/runtime-config.js?v=20260410-refactor1"></script>
   <script src="js/shared/api.js?v=20260410-refactor1"></script>
   <script src="js/shared/storage-keys.js?v=20260413-refactor1"></script>
+  <script src="js/shared/setlists.js?v=20260508-mycp-setlists1"></script>
+  <script src="js/shared/setlist-ui.js?v=20260508-mycp-setlists1"></script>
   <script src="js/shared/song-utils.js?v=20260411-youtubevalidation1"></script>
   <script src="js/chordwiki-render.js?v=20260410-refactor1"></script>
   <script src="js/auth.js?v=20260410-refactor1"></script>

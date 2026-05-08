@@ -10,6 +10,10 @@ function getEndMarkerEl() {
   return getMarkerLayerEl()?.querySelector('[data-marker="end"]') || null;
 }
 
+function getStartMarkerEl() {
+  return getMarkerLayerEl()?.querySelector('[data-marker="start"]') || null;
+}
+
 function formatDuration(totalSeconds) {
   const safeSeconds = clamp(Math.round(totalSeconds), 0, MAX_AUTOSCROLL_DURATION_SEC);
   const minutes = Math.floor(safeSeconds / 60);
@@ -141,6 +145,7 @@ async function maybeEstimateAutoScrollDuration(song, displayTitle = '', displayA
     autoScrollState.durationSec = estimatedSec;
     setDurationInputs(estimatedSec);
     saveAutoScrollState({ notify: false });
+    setRemainingDisplay(autoScrollState.durationSec);
     setStatus(`Estimated · ${formatDuration(estimatedSec)} · YouTube参考値`, 'success');
   } catch (error) {
     console.warn('Failed to estimate auto-scroll duration:', error);
@@ -188,11 +193,20 @@ function getDefaultMarkerPositions() {
   const lines = sheetEl.querySelectorAll('p.line:not(.blank), p.comment');
   const endMarkerOffset = Math.max(0, Number(AUTO_SCROLL_END_MARKER_EXTRA_PX) || 0);
   const firstLyricLine = sheetEl.querySelector('p.line:not(.blank)');
+  const chordLines = Array.from(sheetEl.querySelectorAll('p.line')).filter((lineEl) => lineEl.querySelector('span.chord'));
   const defaults = !lines.length
     ? { startY: bounds.top, endY: bounds.bottom + endMarkerOffset }
     : {
-        startY: (firstLyricLine ?? lines[0]).getBoundingClientRect().top + window.scrollY,
-        endY: lines[lines.length - 1].getBoundingClientRect().bottom + window.scrollY + endMarkerOffset
+        startY: (() => {
+          const line = firstLyricLine ?? lines[0];
+          const rect = line.getBoundingClientRect();
+          return Math.round(rect.top + window.scrollY - (rect.height * AUTO_SCROLL_START_MARKER_OFFSET_LINES));
+        })(),
+        endY: (() => {
+          const line = chordLines[chordLines.length - 1] ?? lines[lines.length - 1];
+          const rect = line.getBoundingClientRect();
+          return Math.round(rect.bottom + window.scrollY + endMarkerOffset);
+        })()
       };
 
   autoScrollState.defaultStartY = defaults.startY;
@@ -207,10 +221,13 @@ function clampMarkerToSheet(y, fallbackY = 0, markerName = 'start') {
   }
 
   const candidate = Number.isFinite(y) ? y : fallbackY;
+  const extraTop = markerName === 'start'
+    ? Math.max(0, Math.round(estimateAutoScrollLineHeightPx() * AUTO_SCROLL_START_MARKER_OFFSET_LINES))
+    : 0;
   const extraBottom = markerName === 'end'
     ? Math.max(0, Number(AUTO_SCROLL_END_MARKER_EXTRA_PX) || 0)
     : 0;
-  return clamp(candidate, bounds.top, bounds.bottom + extraBottom);
+  return clamp(candidate, bounds.top - extraTop, bounds.bottom + extraBottom);
 }
 
 function getRangeDistancePx() {
@@ -249,38 +266,11 @@ function updateAutoScrollSpeedUi() {
   }
 }
 
-function loadGlobalAutoScrollSpeedMultiplier() {
-  const key = window.ChordWikiStorageKeys?.MCP_SCROLL_SPEED_KEY;
-  if (!key) {
-    return null;
-  }
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveGlobalAutoScrollSpeedMultiplier(value) {
-  const key = window.ChordWikiStorageKeys?.MCP_SCROLL_SPEED_KEY;
-  if (!key) {
-    return;
-  }
-  try {
-    window.localStorage.setItem(key, String(value));
-  } catch {
-    // noop
-  }
-}
-
 function setAutoScrollSpeedMultiplier(value, { persist = true, notify = true } = {}) {
   const roundedValue = Math.round((Number(value) || 1) * 100) / 100;
   const nextMultiplier = clamp(roundedValue, AUTO_SCROLL_SPEED_MIN_MULTIPLIER, AUTO_SCROLL_SPEED_MAX_MULTIPLIER);
   autoScrollState.speedMultiplier = nextMultiplier;
   updateAutoScrollSpeedUi();
-  saveGlobalAutoScrollSpeedMultiplier(nextMultiplier);
 
   if (persist && autoScrollState.storageKey) {
     saveAutoScrollState({ notify: false });
@@ -319,6 +309,328 @@ function setStatus(message, tone = 'info') {
 
   statusEl.textContent = message || '';
   statusEl.dataset.tone = tone;
+}
+
+function getRemainingDisplayEl() {
+  return document.getElementById('autoscroll-remaining');
+}
+
+function setRemainingDisplay(totalSeconds) {
+  const remainingEl = getRemainingDisplayEl();
+  if (!remainingEl) {
+    return;
+  }
+
+  const remainingSec = Math.max(0, Number(totalSeconds) || 0);
+  remainingEl.textContent = formatDuration(remainingSec > 0 ? Math.ceil(remainingSec) : 0);
+}
+
+function syncHighlightToggleUi() {
+  const toggleInput = document.getElementById('autoscroll-highlight-toggle');
+  if (!toggleInput) {
+    return;
+  }
+
+  const isVariableOn = autoScrollState.variableScrollEnabled !== false;
+  toggleInput.checked = autoScrollState.highlightEnabled !== false;
+  toggleInput.disabled = !isVariableOn;
+  toggleInput.closest('label')?.classList.toggle('is-disabled', !isVariableOn);
+}
+
+function normalizeAutoScrollFocusContextLines(value) {
+  const numericValue = Number.parseInt(String(value ?? ''), 10);
+  const safeValue = Number.isFinite(numericValue)
+    ? numericValue
+    : AUTO_SCROLL_FOCUS_CONTEXT_LINES;
+  return clamp(
+    Math.round(safeValue),
+    AUTO_SCROLL_FOCUS_CONTEXT_LINES_MIN,
+    AUTO_SCROLL_FOCUS_CONTEXT_LINES_MAX
+  );
+}
+
+function syncAutoScrollFocusContextLinesUi() {
+  const inputEl = document.getElementById('autoscroll-highlight-context-lines');
+  if (!inputEl) {
+    return;
+  }
+
+  const isVariableOn = autoScrollState.variableScrollEnabled !== false;
+  const lines = normalizeAutoScrollFocusContextLines(autoScrollState.focusContextLines);
+  autoScrollState.focusContextLines = lines;
+  inputEl.value = String(lines);
+  inputEl.disabled = !isVariableOn;
+  inputEl.closest('label')?.classList.toggle('is-disabled', !isVariableOn);
+}
+
+function setAutoScrollFocusContextLines(value, { persist = true, notify = true } = {}) {
+  const nextLines = normalizeAutoScrollFocusContextLines(value);
+  autoScrollState.focusContextLines = nextLines;
+  syncAutoScrollFocusContextLinesUi();
+
+  if (autoScrollState.isPlaying && autoScrollState.variableScrollEnabled !== false) {
+    updateVariableScrollFocusOverlay();
+  }
+
+  if (persist) {
+    saveAutoScrollState({ notify: false });
+  }
+
+  if (notify) {
+    setStatus(`Stopped · ハイライト範囲 前後${nextLines}行`, 'info');
+  }
+}
+
+function estimateAutoScrollLineHeightPx() {
+  const lines = Array.from(getSheetEl()?.querySelectorAll('p.line') || []);
+  const heights = [];
+
+  lines.slice(0, 24).forEach((lineEl) => {
+    const lineHeight = Math.round(lineEl.getBoundingClientRect().height);
+    if (lineHeight >= 10 && lineHeight <= 160) {
+      heights.push(lineHeight);
+    }
+  });
+
+  if (!heights.length) {
+    return 28;
+  }
+
+  heights.sort((left, right) => left - right);
+  return heights[Math.floor(heights.length / 2)] || 28;
+}
+
+function updateFocusOverlayGeometry() {
+  const overlayEl = document.getElementById('autoscroll-focus-overlay');
+  if (!overlayEl) {
+    return;
+  }
+
+  const lineHeight = estimateAutoScrollLineHeightPx();
+  const highlightHeight = clamp(
+    Math.round(lineHeight * 11),
+    120,
+    Math.max(140, window.innerHeight - 80)
+  );
+  autoScrollState.overlayHighlightHeight = highlightHeight;
+
+  let top;
+  if (typeof autoScrollState.overlayScreenY === 'number') {
+    top = clamp(
+      Math.round(autoScrollState.overlayScreenY - (highlightHeight / 2)),
+      0,
+      Math.max(0, window.innerHeight - highlightHeight)
+    );
+  } else {
+    top = Math.max(0, Math.round((window.innerHeight - highlightHeight) / 2));
+  }
+
+  overlayEl.style.setProperty('--autoscroll-focus-top', `${top}px`);
+  overlayEl.style.setProperty('--autoscroll-focus-height', `${highlightHeight}px`);
+}
+
+function applyFocusOverlayTop() {
+  if (typeof autoScrollState.overlayScreenY !== 'number') {
+    return;
+  }
+
+  const overlayEl = document.getElementById('autoscroll-focus-overlay');
+  if (!overlayEl) {
+    return;
+  }
+
+  const height = autoScrollState.overlayHighlightHeight || 140;
+  const top = clamp(
+    Math.round(autoScrollState.overlayScreenY - (height / 2)),
+    0,
+    Math.max(0, window.innerHeight - height)
+  );
+  overlayEl.style.setProperty('--autoscroll-focus-top', `${top}px`);
+}
+
+function countLinesInMarkerRange() {
+  const lines = Array.from(getSheetEl()?.querySelectorAll('p.line') || []);
+  if (!lines.length) {
+    return 0;
+  }
+
+  let count = 0;
+  lines.forEach((lineEl) => {
+    const rect = lineEl.getBoundingClientRect();
+    const centerY = ((rect.top + rect.bottom) / 2) + window.scrollY;
+    if (centerY >= autoScrollState.startY - 14 && centerY <= autoScrollState.endY + 14) {
+      count += 1;
+    }
+  });
+  return count;
+}
+
+function canUseFocusOverlay() {
+  if (autoScrollState.variableScrollEnabled === false) {
+    return false;
+  }
+
+  if (autoScrollState.highlightEnabled === false) {
+    return false;
+  }
+
+  if (getMaxWindowScrollY() < AUTO_SCROLL_FOCUS_OVERLAY_MIN_SCROLL_PX) {
+    return false;
+  }
+
+  if (countLinesInMarkerRange() < AUTO_SCROLL_FOCUS_OVERLAY_MIN_LINES) {
+    return false;
+  }
+
+  const scrollRange = Math.abs(getAutoScrollStopScrollY() - getAutoScrollStartScrollY());
+  const threshold = Math.max(
+    AUTO_SCROLL_FOCUS_OVERLAY_MIN_SCROLL_PX,
+    Math.round(estimateAutoScrollLineHeightPx() * 2)
+  );
+  return scrollRange >= threshold;
+}
+
+function setFocusOverlayActive(active) {
+  const overlayEl = document.getElementById('autoscroll-focus-overlay');
+  if (!overlayEl) {
+    return;
+  }
+
+  const shouldShow = active && canUseFocusOverlay();
+  overlayEl.style.display = shouldShow ? 'block' : 'none';
+}
+
+function getEndMarkerBottomY() {
+  const endMarkerEl = getEndMarkerEl();
+  if (endMarkerEl instanceof Element) {
+    const rect = endMarkerEl.getBoundingClientRect();
+    return rect.bottom + window.scrollY;
+  }
+
+  return Number.isFinite(autoScrollState.endY) ? autoScrollState.endY : 0;
+}
+
+function getTimelineLinePositionAtProgress(progressSec) {
+  const timeline = autoScrollState.timeline;
+  const segments = Array.isArray(timeline?.segments) ? timeline.segments : [];
+  if (!segments.length) {
+    return 0;
+  }
+
+  const safeProgress = clamp(Number(progressSec) || 0, 0, Number(timeline?.durationSec) || 0);
+  const segment = segments.find((item) => safeProgress <= item.endSec + 0.0001)
+    || segments[segments.length - 1];
+
+  if (!segment) {
+    return 0;
+  }
+
+  const localRatio = segment.durationSec > 0.0001
+    ? clamp((safeProgress - segment.startSec) / segment.durationSec, 0, 1)
+    : 1;
+  return segment.index + localRatio;
+}
+
+function interpolateEntryBoundaryY(entries, indexFloat, boundaryKey) {
+  if (!Array.isArray(entries) || !entries.length) {
+    return 0;
+  }
+
+  const maxIndex = entries.length - 1;
+  const safeIndex = clamp(Number(indexFloat) || 0, 0, maxIndex);
+  const lowerIndex = Math.floor(safeIndex);
+  const upperIndex = Math.min(maxIndex, lowerIndex + 1);
+  const ratio = clamp(safeIndex - lowerIndex, 0, 1);
+  const lowerY = Number(entries[lowerIndex]?.[boundaryKey]) || 0;
+  const upperY = Number(entries[upperIndex]?.[boundaryKey]) || lowerY;
+  return lowerY + ((upperY - lowerY) * ratio);
+}
+
+function updateVariableScrollFocusOverlay() {
+  const overlayEl = document.getElementById('autoscroll-focus-overlay');
+  const timeline = autoScrollState.timeline;
+  const entries = Array.isArray(timeline?.entries) ? timeline.entries : [];
+  if (!overlayEl || !entries.length) {
+    return;
+  }
+
+  const contextLines = Math.max(0, normalizeAutoScrollFocusContextLines(autoScrollState.focusContextLines));
+  const windowSize = Math.min(entries.length, (contextLines * 2) + 1);
+  const maxTopIndex = Math.max(0, entries.length - windowSize);
+
+  const overlayProgressSec = autoScrollState.phase === 'lead-in'
+    ? clamp(Number(autoScrollState.phaseElapsedSec) || 0, 0, Number(timeline.durationSec) || 0)
+    : clamp(Number(autoScrollState.progressSec) || 0, 0, Number(timeline.durationSec) || 0);
+  const currentLineFloat = getTimelineLinePositionAtProgress(overlayProgressSec);
+  const topLineFloat = clamp(currentLineFloat - contextLines, 0, maxTopIndex);
+  const bottomLineFloat = topLineFloat + Math.max(0, windowSize - 1);
+
+  let overlayTopDocY = interpolateEntryBoundaryY(entries, topLineFloat, 'topY');
+  let overlayBottomDocY = interpolateEntryBoundaryY(entries, bottomLineFloat, 'bottomY');
+
+  const baseMinTopDocY = Number(entries[0]?.topY) || overlayTopDocY;
+  let minTopDocY = baseMinTopDocY;
+  if (autoScrollState.phase === 'lead-in') {
+    const firstLineEl = entries[0]?.el;
+    if (firstLineEl instanceof Element) {
+      const lineRect = firstLineEl.getBoundingClientRect();
+      let chordTop = lineRect.top;
+      firstLineEl.querySelectorAll('span.chord').forEach((chordEl) => {
+        const chordRect = chordEl.getBoundingClientRect();
+        chordTop = Math.min(chordTop, chordRect.top);
+      });
+      const topCorrectionPx = Math.max(0, Math.round(lineRect.top - chordTop));
+      overlayTopDocY -= topCorrectionPx;
+    }
+
+    const startMarkerEl = getStartMarkerEl();
+    if (startMarkerEl instanceof Element) {
+      minTopDocY = startMarkerEl.getBoundingClientRect().bottom + window.scrollY;
+    } else if (Number.isFinite(autoScrollState.startY)) {
+      minTopDocY = autoScrollState.startY;
+    }
+  }
+
+  const maxBottomDocY = Math.max(baseMinTopDocY, getEndMarkerBottomY());
+  const desiredHeight = Math.max(1, overlayBottomDocY - overlayTopDocY);
+
+  overlayBottomDocY = clamp(overlayBottomDocY, minTopDocY, maxBottomDocY);
+  overlayTopDocY = clamp(overlayBottomDocY - desiredHeight, minTopDocY, overlayBottomDocY - 1);
+
+  const topScreen = clamp(
+    Math.round(overlayTopDocY - window.scrollY),
+    0,
+    Math.max(0, window.innerHeight - 1)
+  );
+  const height = clamp(
+    Math.round(overlayBottomDocY - overlayTopDocY),
+    1,
+    Math.max(1, window.innerHeight - topScreen)
+  );
+
+  autoScrollState.overlayHighlightHeight = height;
+  overlayEl.style.setProperty('--autoscroll-focus-top', `${topScreen}px`);
+  overlayEl.style.setProperty('--autoscroll-focus-height', `${height}px`);
+}
+
+function setAutoScrollHighlightEnabled(enabled, { persist = true, notify = true } = {}) {
+  autoScrollState.highlightEnabled = enabled !== false;
+  syncHighlightToggleUi();
+  updateFocusOverlayGeometry();
+  setFocusOverlayActive(autoScrollState.isPlaying);
+
+  if (autoScrollState.isPlaying && autoScrollState.variableScrollEnabled !== false) {
+    updateVariableScrollFocusOverlay();
+  }
+
+  if (persist) {
+    saveAutoScrollState({ notify: false });
+  }
+
+  if (notify) {
+    const label = autoScrollState.highlightEnabled ? 'ハイライト表示 ON' : 'ハイライト表示 OFF';
+    setStatus(`Stopped · ${label}`, 'info');
+  }
 }
 
 function getAutoScrollRemainingSec() {
@@ -373,6 +685,7 @@ function updatePlayingStatus({ force = false } = {}) {
   autoScrollState.lastStatusRemainingSec = payload.remainingDisplaySec;
   autoScrollState.lastStatusTone = payload.tone;
   autoScrollState.lastStatusSpeed = currentSpeed;
+  setRemainingDisplay(payload.remainingDisplaySec);
   setStatus(payload.message, payload.tone);
 }
 
@@ -385,6 +698,8 @@ function updateAutoScrollControls() {
   toggleButton.textContent = autoScrollState.isPlaying ? 'Stop' : 'Start';
   toggleButton.classList.toggle('is-playing', autoScrollState.isPlaying);
   syncVariableScrollToggleUi();
+  syncHighlightToggleUi();
+  syncAutoScrollFocusContextLinesUi();
   updateAutoScrollSpeedUi();
 }
 
@@ -402,6 +717,8 @@ function setAutoScrollVariableScrollEnabled(enabled, { persist = true, notify = 
   const changed = autoScrollState.variableScrollEnabled !== nextEnabled;
   autoScrollState.variableScrollEnabled = nextEnabled;
   syncVariableScrollToggleUi();
+  syncHighlightToggleUi();
+  syncAutoScrollFocusContextLinesUi();
 
   if (autoScrollState.isPlaying && changed) {
     stopAutoScroll('Stopped · スクロールモードを切り替えました', 'info');
@@ -494,7 +811,9 @@ function saveAutoScrollState({ notify = true } = {}) {
       endOffsetPx: Math.round(autoScrollState.endY - defaultEndY),
       durationSec: Math.max(0, Math.round(autoScrollState.durationSec)),
       speedMultiplier: Math.round((Number(autoScrollState.speedMultiplier) || 1) * 100) / 100,
-      variableScrollEnabled: autoScrollState.variableScrollEnabled !== false
+      variableScrollEnabled: autoScrollState.variableScrollEnabled !== false,
+      highlightEnabled: autoScrollState.highlightEnabled !== false,
+      focusContextLines: normalizeAutoScrollFocusContextLines(autoScrollState.focusContextLines)
     };
 
     window.localStorage.setItem(autoScrollState.storageKey, JSON.stringify(payload));
@@ -532,6 +851,7 @@ function syncDurationFromInputs({ notify = true } = {}) {
   }
 
   autoScrollState.durationSec = normalized.durationSec;
+  setRemainingDisplay(autoScrollState.isPlaying ? getAutoScrollRemainingDisplaySec() : autoScrollState.durationSec);
   refreshAutoScrollTimelineFromCurrentSettings();
 
   if (autoScrollState.isPlaying) {
@@ -664,15 +984,9 @@ function restoreAutoScrollState() {
   autoScrollState.endY = defaults.endY;
   autoScrollState.durationSec = DEFAULT_DURATION_SEC;
   autoScrollState.speedMultiplier = 1;
-  const globalSpeedMultiplier = loadGlobalAutoScrollSpeedMultiplier();
-  if (Number.isFinite(globalSpeedMultiplier)) {
-    autoScrollState.speedMultiplier = clamp(
-      Number(globalSpeedMultiplier),
-      AUTO_SCROLL_SPEED_MIN_MULTIPLIER,
-      AUTO_SCROLL_SPEED_MAX_MULTIPLIER
-    );
-  }
   autoScrollState.variableScrollEnabled = true;
+  autoScrollState.highlightEnabled = true;
+  autoScrollState.focusContextLines = AUTO_SCROLL_FOCUS_CONTEXT_LINES;
 
   if (autoScrollState.storageKey) {
     try {
@@ -711,17 +1025,27 @@ function restoreAutoScrollState() {
     if (typeof savedState.variableScrollEnabled === 'boolean') {
       autoScrollState.variableScrollEnabled = savedState.variableScrollEnabled;
     }
+
+    if (typeof savedState.highlightEnabled === 'boolean') {
+      autoScrollState.highlightEnabled = savedState.highlightEnabled;
+    }
+
+    if (Number.isFinite(savedState.focusContextLines)) {
+      autoScrollState.focusContextLines = normalizeAutoScrollFocusContextLines(savedState.focusContextLines);
+    }
   }
 
   setDurationInputs(autoScrollState.durationSec);
+  setRemainingDisplay(autoScrollState.durationSec);
   syncVariableScrollToggleUi();
+  syncHighlightToggleUi();
+  syncAutoScrollFocusContextLinesUi();
   updateAutoScrollSpeedUi();
   applyMarkerStateToRenderedSheet({ resetInvalidRange: true });
 
   autoScrollState.rewindToStartPending = false;
-  autoScrollState.startFromMarkerPending = Number.isFinite(autoScrollState.startY)
-    && Number.isFinite(autoScrollState.defaultStartY)
-    && Math.abs(autoScrollState.startY - autoScrollState.defaultStartY) > START_SCROLL_TOLERANCE_PX;
+  // 停止中の再生開始は常に Start 基準で開始する。
+  autoScrollState.startFromMarkerPending = Number.isFinite(autoScrollState.startY);
 
   if (savedState) {
     updateStoppedStatus(true);
@@ -986,14 +1310,69 @@ function getLineLyricLength(lineEl) {
     return 0;
   }
 
+  // chord span を除いた歌詞テキストのみを対象に、記号類を除外して文字数を集計する。
   let totalLength = 0;
   const textNodes = lineEl.querySelectorAll('span:not(.chord)');
   textNodes.forEach((node) => {
-    const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
-    totalLength += text.length;
+    totalLength += String(node.textContent || '').replace(LYRIC_SYMBOL_RE, '').length;
   });
 
+  if (totalLength === 0) {
+    totalLength = String(lineEl.innerText || '').replace(LYRIC_SYMBOL_RE, '').length;
+  }
+
   return totalLength;
+}
+
+function getLineChordCount(lineEl) {
+  if (!(lineEl instanceof Element)) {
+    return 0;
+  }
+
+  return lineEl.querySelectorAll('span.chord').length;
+}
+
+function getLineBarHintCount(lineEl) {
+  if (!(lineEl instanceof Element)) {
+    return 0;
+  }
+
+  const barMatches = String(lineEl.innerText || '').match(/\|/g);
+  return clamp((barMatches || []).length, 0, 8);
+}
+
+function clampAndNormalizeSegmentDurations(rawDurations, totalDurationSec) {
+  if (!Array.isArray(rawDurations) || rawDurations.length === 0) {
+    return [];
+  }
+
+  const safeTotal = Math.max(0.0001, Number(totalDurationSec) || 0);
+  const count = rawDurations.length;
+  const avgDuration = safeTotal / Math.max(1, count);
+  const minDuration = Math.max(0.0001, avgDuration * AUTO_SCROLL_SEGMENT_MIN_AVG_RATIO);
+  const maxDuration = Math.max(minDuration, avgDuration * AUTO_SCROLL_SEGMENT_MAX_AVG_RATIO);
+  const clampedDurations = rawDurations.map((duration) => {
+    const safeDuration = Math.max(0.0001, Number(duration) || 0);
+    return clamp(safeDuration, minDuration, maxDuration);
+  });
+
+  const clampedSum = clampedDurations.reduce((sum, value) => sum + value, 0);
+  if (!Number.isFinite(clampedSum) || clampedSum <= 0.0001) {
+    return rawDurations.map(() => safeTotal / count);
+  }
+
+  const normalizedDurations = clampedDurations.map((duration) => (duration / clampedSum) * safeTotal);
+  const normalizedSum = normalizedDurations.reduce((sum, value) => sum + value, 0);
+  if (!normalizedDurations.length) {
+    return [];
+  }
+
+  normalizedDurations[normalizedDurations.length - 1] = Math.max(
+    0.0001,
+    normalizedDurations[normalizedDurations.length - 1] + (safeTotal - normalizedSum)
+  );
+
+  return normalizedDurations;
 }
 
 function normalizeWeights(rawWeights, { floor = AUTO_SCROLL_WEIGHT_FLOOR } = {}) {
@@ -1021,7 +1400,7 @@ function collectAutoScrollLineEntries() {
     return [];
   }
 
-  const lines = Array.from(sheetEl.querySelectorAll('p.line:not(.blank), p.comment'));
+  const lines = Array.from(sheetEl.querySelectorAll('p.line:not(.blank)'));
   const entries = [];
 
   lines.forEach((lineEl) => {
@@ -1035,12 +1414,14 @@ function collectAutoScrollLineEntries() {
 
     entries.push({
       el: lineEl,
-      type: lineEl.matches('p.comment') ? 'comment' : 'line',
+      type: 'line',
       topY,
       bottomY,
       centerY: (topY + bottomY) / 2,
       heightPx: Math.max(1, rect.height),
-      lyricLength: lineEl.matches('p.comment') ? 0 : getLineLyricLength(lineEl)
+      lyricLength: getLineLyricLength(lineEl),
+      chordCount: getLineChordCount(lineEl),
+      barHintCount: getLineBarHintCount(lineEl)
     });
   });
 
@@ -1056,17 +1437,26 @@ function buildAutoScrollTimeline() {
   }
 
   const lyricValues = entries.map((entry) => entry.lyricLength);
+  const chordValues = entries.map((entry) => entry.chordCount);
   const heightValues = entries.map((entry) => entry.heightPx);
+  const barHintValues = entries.map((entry) => entry.barHintCount);
   const lyricNormalized = normalizeWeights(lyricValues, { floor: 0 });
+  const chordNormalized = normalizeWeights(chordValues, { floor: 0 });
   const heightNormalized = normalizeWeights(heightValues, { floor: 0 });
+  const barHintNormalized = normalizeWeights(barHintValues, { floor: 0 });
 
   entries.forEach((entry, index) => {
-    if (entry.type === 'comment') {
-      entry.weight = AUTO_SCROLL_COMMENT_WEIGHT;
-      return;
+    let rawWeight =
+      (lyricNormalized[index] * AUTO_SCROLL_WEIGHT_LYRIC_RATIO)
+      + (chordNormalized[index] * AUTO_SCROLL_WEIGHT_CHORD_RATIO)
+      + (heightNormalized[index] * AUTO_SCROLL_WEIGHT_VISUAL_RATIO)
+      + (barHintNormalized[index] * AUTO_SCROLL_WEIGHT_BAR_HINT_RATIO);
+
+    if (entry.lyricLength <= AUTO_SCROLL_PERFORMANCE_LINE_LYRIC_MAX
+      && entry.chordCount >= AUTO_SCROLL_PERFORMANCE_LINE_CHORD_MIN) {
+      rawWeight = Math.max(rawWeight, AUTO_SCROLL_PERFORMANCE_LINE_MIN_WEIGHT);
     }
 
-    const rawWeight = (lyricNormalized[index] * 0.65) + (heightNormalized[index] * 0.35);
     entry.weight = rawWeight;
   });
 
@@ -1094,13 +1484,14 @@ function buildAutoScrollTimeline() {
     const segmentWeights = entries.slice(0, -1).map((entry) => entry.weight);
     const totalWeight = Math.max(0.0001, segmentWeights.reduce((sum, value) => sum + value, 0));
     const totalDurationSec = Math.max(1, autoScrollState.mainDurationSec || 0);
+    const rawDurations = segmentWeights.map((weight) => Math.max(0.0001, totalDurationSec * (weight / totalWeight)));
+    const segmentDurations = clampAndNormalizeSegmentDurations(rawDurations, totalDurationSec);
     let elapsedSec = 0;
 
     for (let i = 0; i < segmentCount; i += 1) {
-      const ratio = segmentWeights[i] / totalWeight;
       const durationSec = i === segmentCount - 1
         ? Math.max(0.0001, totalDurationSec - elapsedSec)
-        : Math.max(0.0001, totalDurationSec * ratio);
+        : Math.max(0.0001, segmentDurations[i] || 0);
       const startSec = elapsedSec;
       const endSec = startSec + durationSec;
       elapsedSec = endSec;
@@ -1126,6 +1517,10 @@ function buildAutoScrollTimeline() {
 
   if (segments.length && Number.isFinite(autoScrollState.startY)) {
     segments[0].startY = autoScrollState.startY;
+  }
+
+  if (segments.length && Number.isFinite(autoScrollState.endY)) {
+    segments[segments.length - 1].endY = autoScrollState.endY;
   }
 
   autoScrollState.timelineReady = true;
@@ -1281,22 +1676,177 @@ function getAutoScrollStopScrollY() {
   return clamp(autoScrollState.endY - stopViewportY, 0, getMaxWindowScrollY());
 }
 
-function isEndMarkerVisibleInViewport() {
+function isEndMarkerVisibleEnough() {
   const endMarkerEl = getEndMarkerEl();
-  if (!endMarkerEl) {
+  if (!(endMarkerEl instanceof Element)) {
     return false;
   }
 
   const rect = endMarkerEl.getBoundingClientRect();
-  // End がビューポート内へ100px入ったら true を返す
-  return rect.top <= window.innerHeight - AUTO_SCROLL_END_STOP_BUFFER_PX;
+  const reachedWithBuffer = rect.top <= (window.innerHeight - AUTO_SCROLL_END_STOP_BUFFER_PX);
+  const atPageEnd = window.scrollY >= getMaxWindowScrollY() - 1;
+  const visibleInViewport = rect.bottom >= 0 && rect.top <= window.innerHeight;
+  return reachedWithBuffer || (atPageEnd && visibleInViewport);
+}
+
+function stopEndCountdownDisplay() {
+  if (autoScrollState.endCountdownTimerId) {
+    window.clearInterval(autoScrollState.endCountdownTimerId);
+    autoScrollState.endCountdownTimerId = 0;
+  }
+
+  if (autoScrollState.endCountdownFrameId) {
+    window.cancelAnimationFrame(autoScrollState.endCountdownFrameId);
+    autoScrollState.endCountdownFrameId = 0;
+  }
+}
+
+function stopOverlayReleaseTimer() {
+  if (autoScrollState.overlayReleaseTimerId) {
+    window.clearTimeout(autoScrollState.overlayReleaseTimerId);
+    autoScrollState.overlayReleaseTimerId = 0;
+  }
+}
+
+function scheduleOverlayReleaseAfterEnd() {
+  stopOverlayReleaseTimer();
+  autoScrollState.overlayReleaseTimerId = window.setTimeout(() => {
+    autoScrollState.overlayReleaseTimerId = 0;
+    if (!autoScrollState.isPlaying && autoScrollState.rewindToStartPending) {
+      autoScrollState.overlayScreenY = null;
+      setFocusOverlayActive(false);
+    }
+  }, AUTO_SCROLL_OVERLAY_RELEASE_DELAY_MS);
+}
+
+function startEndCountdownDisplay(remainingSec, phase1DurationSec) {
+  stopEndCountdownDisplay();
+
+  const remainStartSec = Math.max(0, Number(remainingSec) || 0);
+  const durationSec = Math.max(0, Number(phase1DurationSec) || 0);
+
+  setRemainingDisplay(remainStartSec);
+  if (remainStartSec <= 0) {
+    setRemainingDisplay(0);
+    return;
+  }
+
+  if (durationSec <= 0) {
+    setRemainingDisplay(0);
+    return;
+  }
+
+  const startedAtMs = performance.now();
+  function step(nowMs) {
+    const elapsedSec = Math.max(0, (nowMs - startedAtMs) / 1000);
+    const remainRatio = clamp(1 - (elapsedSec / durationSec), 0, 1);
+    const remainNow = remainStartSec * remainRatio;
+    setRemainingDisplay(remainNow);
+
+    if (remainNow <= 0 || elapsedSec >= durationSec) {
+      setRemainingDisplay(0);
+      autoScrollState.endCountdownFrameId = 0;
+      stopEndCountdownDisplay();
+      return;
+    }
+
+    autoScrollState.endCountdownFrameId = window.requestAnimationFrame(step);
+  }
+
+  autoScrollState.endCountdownFrameId = window.requestAnimationFrame(step);
+}
+
+function stopOverlayEndAnimation() {
+  if (autoScrollState.overlayEndAnimId) {
+    window.cancelAnimationFrame(autoScrollState.overlayEndAnimId);
+    autoScrollState.overlayEndAnimId = null;
+  }
+
+  stopOverlayReleaseTimer();
+}
+
+function startOverlayEndAnimation(phase1DurationSec) {
+  stopOverlayEndAnimation();
+
+  const endMarkerEl = getEndMarkerEl();
+  const markerRect = endMarkerEl?.getBoundingClientRect();
+  const endTopScreenY = markerRect ? markerRect.top : autoScrollState.endY - window.scrollY;
+  const endBottomScreenY = markerRect ? markerRect.bottom : autoScrollState.endY - window.scrollY;
+  const overlayHeight = autoScrollState.overlayHighlightHeight || 140;
+
+  const phase1Center = endTopScreenY - (overlayHeight / 2);
+  const phase2Center = Math.max(phase1Center, endBottomScreenY - (overlayHeight / 2));
+  const startCenter = typeof autoScrollState.overlayScreenY === 'number'
+    ? autoScrollState.overlayScreenY
+    : (window.innerHeight / 2);
+
+  const distanceToPhase1 = phase1Center - startCenter;
+  const durationSec = Math.max(0, Number(phase1DurationSec) || 0);
+
+  if (distanceToPhase1 <= 0.01) {
+    autoScrollState.overlayScreenY = phase1Center;
+    applyFocusOverlayTop();
+  }
+
+  const speedPxPerSec = (distanceToPhase1 > 0.01 && durationSec > 0.001)
+    ? (distanceToPhase1 / durationSec)
+    : Math.max(60, (phase2Center - phase1Center) / AUTO_SCROLL_OVERLAY_END_MIN_DURATION_SEC);
+
+  let previousMs = null;
+  function step(nowMs) {
+    if (previousMs === null) {
+      previousMs = nowMs;
+    }
+
+    const dtSec = clamp((nowMs - previousMs) / 1000, 0, 0.12);
+    previousMs = nowMs;
+
+    const current = Number(autoScrollState.overlayScreenY);
+    const target = current >= phase1Center ? phase2Center : phase1Center;
+    const dist = target - current;
+    const move = speedPxPerSec * dtSec;
+
+    if (dist <= move) {
+      autoScrollState.overlayScreenY = target;
+      applyFocusOverlayTop();
+
+      if (target >= phase2Center - 0.01) {
+        autoScrollState.overlayEndAnimId = null;
+        scheduleOverlayReleaseAfterEnd();
+        return;
+      }
+
+      autoScrollState.overlayEndAnimId = window.requestAnimationFrame(step);
+      return;
+    }
+
+    autoScrollState.overlayScreenY = current + move;
+    applyFocusOverlayTop();
+    autoScrollState.overlayEndAnimId = window.requestAnimationFrame(step);
+  }
+
+  autoScrollState.overlayEndAnimId = window.requestAnimationFrame(step);
 }
 
 function stopAutoScroll(message = 'Stopped', tone = 'info', { reachedEnd = false } = {}) {
+  const remainingBeforeStopSec = Math.max(0, Number(autoScrollState.durationSec || 0) - Number(autoScrollState.playbackElapsedSec || 0));
+  const speedAtStop = clamp(
+    Number(autoScrollState.speedMultiplier) || 1,
+    AUTO_SCROLL_SPEED_MIN_MULTIPLIER,
+    AUTO_SCROLL_SPEED_MAX_MULTIPLIER
+  );
+  // 停止時が遅延開始(lead-in)フェーズだった場合、再スタート時に先頭から再開できるよう記録する。
+  const wasInLeadIn = !reachedEnd && autoScrollState.phase === 'lead-in';
+
+  stopEndCountdownDisplay();
+
   if (autoScrollState.frameId) {
     window.cancelAnimationFrame(autoScrollState.frameId);
     autoScrollState.frameId = null;
   }
+
+  stopOverlayEndAnimation();
+  stopOverlayReleaseTimer();
 
   autoScrollState.isPlaying = false;
   autoScrollState.speedPxPerSec = 0;
@@ -1313,10 +1863,36 @@ function stopAutoScroll(message = 'Stopped', tone = 'info', { reachedEnd = false
   autoScrollState.leadInSec = 0;
   autoScrollState.timelineReady = false;
   autoScrollState.userScrollOverrideUntilMs = 0;
+  autoScrollState.overlayPhase = 'center';
+  autoScrollState.overlayPrevScrollY = window.scrollY;
 
   if (reachedEnd) {
+    const endPhase1DurationSec = remainingBeforeStopSec > 0
+      ? (remainingBeforeStopSec / speedAtStop)
+      : 0;
     autoScrollState.rewindToStartPending = true;
     autoScrollState.startFromMarkerPending = true;
+    setFocusOverlayActive(true);
+
+    if (autoScrollState.variableScrollEnabled !== false) {
+      updateVariableScrollFocusOverlay();
+      if (remainingBeforeStopSec <= 0.001) {
+        scheduleOverlayReleaseAfterEnd();
+      } else {
+        startEndCountdownDisplay(remainingBeforeStopSec, endPhase1DurationSec);
+      }
+    } else {
+      startOverlayEndAnimation(endPhase1DurationSec);
+      startEndCountdownDisplay(remainingBeforeStopSec, endPhase1DurationSec);
+    }
+  } else {
+    autoScrollState.overlayScreenY = null;
+    setFocusOverlayActive(false);
+    setRemainingDisplay(autoScrollState.durationSec);
+    // lead-in 中に停止した場合は、次の Start で先頭(Start マーカー)から再開する。
+    if (wasInLeadIn) {
+      autoScrollState.startFromMarkerPending = true;
+    }
   }
 
   updateAutoScrollControls();
@@ -1329,7 +1905,7 @@ function recalculateLegacyAutoScrollSpeed() {
   const remainingDistancePx = getAutoScrollStopScrollY() - window.scrollY;
 
   if (remainingDistancePx <= 0.5) {
-    stopAutoScroll('Stopped · End が見えたため停止', 'success', { reachedEnd: true });
+    stopAutoScroll('Stopped · End に到達しました。クリックで先頭へ戻ります。', 'success', { reachedEnd: true });
     return false;
   }
 
@@ -1353,11 +1929,6 @@ function recalculateLegacyAutoScrollSpeed() {
 function recalculateAutoScrollSpeed() {
   if (!autoScrollState.isPlaying) {
     return true;
-  }
-
-  if (isEndMarkerVisibleInViewport()) {
-    stopAutoScroll('Stopped · End が見えたため停止', 'success', { reachedEnd: true });
-    return false;
   }
 
   if (autoScrollState.variableScrollEnabled === false) {
@@ -1396,17 +1967,37 @@ function runAutoScrollFrame(nowMs) {
   autoScrollState.lastFrameMs = nowMs;
 
   if (autoScrollState.userScrollOverrideUntilMs > nowMs) {
+    const scrollDelta = window.scrollY - autoScrollState.overlayPrevScrollY;
+    autoScrollState.overlayPrevScrollY = window.scrollY;
+
+    if (autoScrollState.overlayPhase === 'start-to-center') {
+      autoScrollState.overlayScreenY = (autoScrollState.overlayScreenY || window.innerHeight / 2) + (1.2 * scrollDelta);
+      if (autoScrollState.overlayScreenY >= window.innerHeight / 2) {
+        autoScrollState.overlayScreenY = window.innerHeight / 2;
+        autoScrollState.overlayPhase = 'center';
+      }
+    } else {
+      autoScrollState.overlayScreenY = window.innerHeight / 2;
+    }
+
+    if (autoScrollState.variableScrollEnabled !== false) {
+      updateVariableScrollFocusOverlay();
+    } else {
+      applyFocusOverlayTop();
+    }
     autoScrollState.virtualScrollY = window.scrollY;
     autoScrollState.frameId = window.requestAnimationFrame(runAutoScrollFrame);
     return;
   }
 
-  if (isEndMarkerVisibleInViewport()) {
-    stopAutoScroll('Stopped · End が見えたため停止', 'success', { reachedEnd: true });
+  if (autoScrollState.variableScrollEnabled === false && isEndMarkerVisibleEnough()) {
+    stopAutoScroll('Stopped · End に到達しました。クリックで先頭へ戻ります。', 'success', { reachedEnd: true });
     return;
   }
 
   const multiplier = Number.isFinite(autoScrollState.speedMultiplier) ? autoScrollState.speedMultiplier : 1;
+  // Keep countdown and lead-in in wall-clock seconds; speed multiplier affects scroll progression only.
+  const countdownDeltaSec = deltaSec;
   const effectiveDeltaSec = deltaSec * multiplier;
   let focusRatioCurrent = Number.isFinite(autoScrollState.focusRatioCurrent)
     ? autoScrollState.focusRatioCurrent
@@ -1414,8 +2005,13 @@ function runAutoScrollFrame(nowMs) {
 
   autoScrollState.playbackElapsedSec = Math.min(
     Math.max(0, Number(autoScrollState.durationSec) || 0),
-    autoScrollState.playbackElapsedSec + effectiveDeltaSec
+    autoScrollState.playbackElapsedSec + countdownDeltaSec
   );
+
+  if (autoScrollState.playbackElapsedSec >= Math.max(0, Number(autoScrollState.durationSec) || 0)) {
+    stopAutoScroll('Stopped · End に到達しました。クリックで先頭へ戻ります。', 'success', { reachedEnd: true });
+    return;
+  }
 
   if (autoScrollState.variableScrollEnabled === false) {
     autoScrollState.phase = 'main';
@@ -1427,10 +2023,13 @@ function runAutoScrollFrame(nowMs) {
 
     autoScrollState.virtualScrollY += autoScrollState.speedPxPerSec * deltaSec;
     setAutoScrollScrollY(autoScrollState.virtualScrollY);
+    autoScrollState.overlayScreenY = window.innerHeight / 2;
+    autoScrollState.overlayPrevScrollY = window.scrollY;
+    applyFocusOverlayTop();
     updatePlayingStatus();
 
-    if (isEndMarkerVisibleInViewport()) {
-      stopAutoScroll('Stopped · End が見えたため停止', 'success', { reachedEnd: true });
+    if (isEndMarkerVisibleEnough()) {
+      stopAutoScroll('Stopped · End に到達しました。クリックで先頭へ戻ります。', 'success', { reachedEnd: true });
       return;
     }
 
@@ -1439,18 +2038,21 @@ function runAutoScrollFrame(nowMs) {
   }
 
   if (autoScrollState.phase === 'lead-in') {
-    autoScrollState.phaseElapsedSec += effectiveDeltaSec;
+    autoScrollState.phaseElapsedSec += countdownDeltaSec;
 
     const leadRatio = autoScrollState.leadInSec > 0
       ? clamp(autoScrollState.phaseElapsedSec / autoScrollState.leadInSec, 0, 1)
       : 1;
-    // 遅延開始中は表示位置を固定し、実スクロール開始までは画面を動かさない。
+    // 遅延開始中も時間経過に合わせてハイライトエリアを追従させる。
     focusRatioCurrent = AUTO_SCROLL_FOCUS_RATIO_FINAL;
 
     if (leadRatio >= 1) {
       autoScrollState.phase = 'main';
       focusRatioCurrent = AUTO_SCROLL_FOCUS_RATIO_FINAL;
     }
+
+    autoScrollState.overlayPrevScrollY = window.scrollY;
+    applyFocusOverlayTop();
   } else {
     autoScrollState.progressSec = clamp(
       autoScrollState.progressSec + effectiveDeltaSec,
@@ -1468,7 +2070,26 @@ function runAutoScrollFrame(nowMs) {
   const targetScrollY = focusY - (window.innerHeight * focusRatioCurrent);
   const reachableTargetScrollY = getReachableScrollY(targetScrollY);
 
-  setAutoScrollScrollY(reachableTargetScrollY);
+  // 可変モードでエンドマーカーが可視になったらスクロールを凍結し、ハイライトのみ継続する
+  if (!(autoScrollState.variableScrollEnabled !== false && isEndMarkerVisibleEnough())) {
+    setAutoScrollScrollY(reachableTargetScrollY);
+  }
+
+  if (autoScrollState.phase !== 'lead-in') {
+    if (autoScrollState.overlayPhase === 'start-to-center') {
+      const scrollDelta = window.scrollY - autoScrollState.overlayPrevScrollY;
+      autoScrollState.overlayScreenY = (autoScrollState.overlayScreenY || window.innerHeight / 2) + (1.2 * scrollDelta);
+      if (autoScrollState.overlayScreenY >= window.innerHeight / 2) {
+        autoScrollState.overlayScreenY = window.innerHeight / 2;
+        autoScrollState.overlayPhase = 'center';
+      }
+    } else {
+      autoScrollState.overlayScreenY = window.innerHeight / 2;
+    }
+  }
+
+  autoScrollState.overlayPrevScrollY = window.scrollY;
+  updateVariableScrollFocusOverlay();
 
   if (!autoScrollState.hasScrollStarted && Math.abs(window.scrollY - autoScrollState.playStartScrollY) > 0.6) {
     autoScrollState.hasScrollStarted = true;
@@ -1476,8 +2097,8 @@ function runAutoScrollFrame(nowMs) {
 
   updatePlayingStatus();
 
-  if (isEndMarkerVisibleInViewport()) {
-    stopAutoScroll('Stopped · End が見えたため停止', 'success', { reachedEnd: true });
+  if (autoScrollState.variableScrollEnabled === false && isEndMarkerVisibleEnough()) {
+    stopAutoScroll('Stopped · End に到達しました。クリックで先頭へ戻ります。', 'success', { reachedEnd: true });
     return;
   }
 
@@ -1505,6 +2126,15 @@ function handleAutoScrollWheelAdjust(event) {
 
 function scrollBackToAutoScrollStart({ notify = true } = {}) {
   const targetScrollY = getAutoScrollStartScrollY();
+  stopEndCountdownDisplay();
+  stopOverlayEndAnimation();
+  stopOverlayReleaseTimer();
+
+  autoScrollState.overlayScreenY = null;
+  autoScrollState.overlayPhase = 'center';
+  autoScrollState.overlayPrevScrollY = window.scrollY;
+  setFocusOverlayActive(false);
+
   setAutoScrollScrollY(targetScrollY);
   autoScrollState.rewindToStartPending = false;
   autoScrollState.startFromMarkerPending = true;
@@ -1581,6 +2211,21 @@ function startAutoScroll() {
   autoScrollState.lastStatusRemainingSec = null;
   autoScrollState.lastStatusTone = '';
   autoScrollState.lastStatusSpeed = null;
+  stopEndCountdownDisplay();
+  stopOverlayEndAnimation();
+  stopOverlayReleaseTimer();
+  autoScrollState.overlayPhase = shouldStartAtMarker ? 'start-to-center' : 'center';
+  autoScrollState.overlayPrevScrollY = window.scrollY;
+  autoScrollState.overlayScreenY = shouldStartAtMarker
+    // AutoScroller仕様: 開始直後はハイライト上端を Start マーカー上端に一致させる。
+    ? autoScrollState.startY - window.scrollY + ((autoScrollState.overlayHighlightHeight || 140) / 2)
+    : (window.innerHeight / 2);
+  updateFocusOverlayGeometry();
+  setFocusOverlayActive(true);
+
+  if (autoScrollState.variableScrollEnabled !== false) {
+    updateVariableScrollFocusOverlay();
+  }
 
   if (shouldResumeFromCurrent) {
     autoScrollState.phase = 'main';
@@ -1678,6 +2323,7 @@ async function handleDeleteSong() {
 function resetAutoScrollDuration() {
   autoScrollState.durationSec = DEFAULT_DURATION_SEC;
   setDurationInputs(autoScrollState.durationSec);
+  setRemainingDisplay(autoScrollState.durationSec);
 
   if (autoScrollState.isPlaying && !recalculateAutoScrollSpeed()) {
     return;
@@ -1719,4 +2365,6 @@ function refreshAutoScrollAfterRender({ restoreSavedState = false } = {}) {
   }
 
   updateAutoScrollControls();
+  updateFocusOverlayGeometry();
+  setFocusOverlayActive(autoScrollState.isPlaying);
 }

@@ -49,6 +49,10 @@
     appName: 'MyChordpro',
     isLocalPreview,
     getApiOrigin,
-    buildApiUrl
+    buildApiUrl,
+    /** セットリスト REST API は未提供のためクラウド同期を行わず localStorage のみ運用する */
+    setlistsCloudSyncEnabled: false,
+    /** 個人用アプリ: 「編集者ロール」を持たないため編集・セットリスト系 UI を常に許可する */
+    alwaysEnableEditorUi: true
   };
 })(window);

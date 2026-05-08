@@ -34,6 +34,7 @@
 - タグサジェスト
 - ランキング/検索結果一覧
 - ページネーション
+- **セットリスト**への導線（`setlists.html`）
 - 新規追加導線（認証済みのみ）
 
 #### 挙動（トップ）
@@ -54,6 +55,8 @@
 
 - ChordPro 描画領域
 - Song Controls（移調/表記、メモ/手書き、オートスクロール、表示設定）
+- **オートスクロール時のフォーカスハイライト**（オーバーレイ、ON/OFF、前後行数、残り時間表示）
+- **セットリストに追加**パネル（ローカル保管）
 - Tags/YouTube パネル
 - YouTube ミニプレイヤー
 
@@ -80,6 +83,23 @@
 - `mode=add|edit` で動作分岐
 - `youtube` は複数入力から `{id,start}` に正規化
 - 削除は edit モード時のみ有効
+
+### 3.4 セットリスト（`/setlists.html`）
+
+#### 表示要素
+
+- トップ（`index.html`）の「セットリスト」導線、曲行の ⋮ メニュー「セットリストに追加」
+- 曲詳細（`song.html`）の「セットリストに追加」パネル
+- 管理画面（`setlists.html`）の一覧・詳細・並べ替え（Sortable）
+
+#### 挙動・データ
+
+- 保存先は **`localStorage` のみ**（キー `mcp_setlists:v1`）。サーバー同期 API は提供しない（`ChordWikiRuntime.setlistsCloudSyncEnabled: false`）。
+- 共有・公開チェック UI は持たない（基本設計 §1 の非共有方針どおり）。
+
+#### 認可（MyChordpro 固有）
+
+- 閲覧専用ロールが存在しないため、`ChordWikiRuntime.alwaysEnableEditorUi: true` と `auth.js` の `isEditor()` により **編集系 UI（`editor-only`）を常に表示**し、セットリストの新規作成・編集を常に可能にする。
 
 ## 4. API 基本設計
 
@@ -127,7 +147,7 @@
 
 ### 保存対象
 
-- 表示設定、移調/表記、オートスクロール位置、注釈、手書き
+- 表示設定、移調/表記、オートスクロール位置、注釈、手書き、**個人用セットリスト**（`mcp_setlists:v1`）
 
 ### 方針
 
@@ -145,9 +165,9 @@
 
 ### 6.2 認可
 
-- ルート制御で `/api/*`, `/song*`, `/edit*` を認証必須にする
+- ルート制御で `/api/*`, `/song*`, `/edit*`, **`/setlists.html`** を認証必須にする
 - API 層で ownerId 境界を再検証する
-- UI の editor 表示は `/.auth/me` を元に切替する
+- UI の editor 表示は `/.auth/me` を元に切替する（**MyChordpro** では用途上 `alwaysEnableEditorUi` により編集 UI を常時有効化する）
 
 ### 6.3 共有仕様
 

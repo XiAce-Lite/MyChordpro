@@ -30,6 +30,10 @@
   }
 
   async function isEditor() {
+    if (global.ChordWikiRuntime?.alwaysEnableEditorUi === true) {
+      return true;
+    }
+
     const principal = await getClientPrincipal();
     return Boolean(String(principal?.userId || '').trim());
   }

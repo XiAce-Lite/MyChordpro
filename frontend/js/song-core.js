@@ -63,20 +63,38 @@ const AUTO_SCROLL_FOCUS_VIEWPORT_RATIO = 0.54;
 const AUTO_SCROLL_FOCUS_RATIO_START = 0.2;
 const AUTO_SCROLL_FOCUS_RATIO_FINAL = 0.4;
 const AUTO_SCROLL_LEAD_IN_SEC = 1;
-const AUTO_SCROLL_COMMENT_WEIGHT = 0.22;
-const AUTO_SCROLL_WEIGHT_FLOOR = 0.12;
+const AUTO_SCROLL_WEIGHT_FLOOR = 0.22;
+const AUTO_SCROLL_WEIGHT_LYRIC_RATIO = 0.55;
+const AUTO_SCROLL_WEIGHT_CHORD_RATIO = 0.25;
+const AUTO_SCROLL_WEIGHT_VISUAL_RATIO = 0.15;
+const AUTO_SCROLL_WEIGHT_BAR_HINT_RATIO = 0.05;
+const AUTO_SCROLL_PERFORMANCE_LINE_LYRIC_MAX = 2;
+const AUTO_SCROLL_PERFORMANCE_LINE_CHORD_MIN = 4;
+const AUTO_SCROLL_PERFORMANCE_LINE_MIN_WEIGHT = 0.45;
+const AUTO_SCROLL_SEGMENT_MIN_AVG_RATIO = 0.45;
+const AUTO_SCROLL_SEGMENT_MAX_AVG_RATIO = 2.2;
+const AUTO_SCROLL_START_MARKER_OFFSET_LINES = 1;
 const AUTO_SCROLL_SPEED_STEP = 0.05;
 const AUTO_SCROLL_SPEED_MIN_MULTIPLIER = 0.5;
 const AUTO_SCROLL_SPEED_MAX_MULTIPLIER = 3;
 const AUTO_SCROLL_WHEEL_STEP_PX = 72;
 const AUTO_SCROLL_SPEED_SMOOTHING = 0.18;
 const AUTO_SCROLL_USER_SCROLL_OVERRIDE_MS = 260;
-const AUTO_SCROLL_END_MARKER_EXTRA_PX = 0;
+const AUTO_SCROLL_END_MARKER_EXTRA_PX = 20;
 const AUTO_SCROLL_END_STOP_BUFFER_PX = 100;
+const AUTO_SCROLL_END_COUNTDOWN_TICK_MS = 120;
+const AUTO_SCROLL_OVERLAY_END_MIN_DURATION_SEC = 0.4;
+const AUTO_SCROLL_OVERLAY_RELEASE_DELAY_MS = 2000;
+const AUTO_SCROLL_FOCUS_OVERLAY_MIN_LINES = 4;
+const AUTO_SCROLL_FOCUS_CONTEXT_LINES = 4;
+const AUTO_SCROLL_FOCUS_CONTEXT_LINES_MIN = 2;
+const AUTO_SCROLL_FOCUS_CONTEXT_LINES_MAX = 6;
+const AUTO_SCROLL_FOCUS_OVERLAY_MIN_SCROLL_PX = 72;
 const MARKER_EDGE_SCROLL_ZONE_PX = 64;
 const MARKER_EDGE_SCROLL_BASE_SPEED = 180;
 const MARKER_EDGE_SCROLL_MAX_SPEED = 1600;
 const MARKER_EDGE_SCROLL_POINTER_SPEED_FACTOR = 0.35;
+const LYRIC_SYMBOL_RE = /[\s\u0000-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u00BF\u30FB\u30FC\u2010-\u2027\u2030-\u205E\u2060-\u206F\uFF01-\uFF0F\uFF1A-\uFF20\uFF3B-\uFF40\uFF5B-\uFF65]/g;
 const CHORD_ALLOWED_PATTERN = /^[A-G](#|b)?((?:m|M|maj|min|sus[0-9]*|add[0-9]*|dim|aug)*[0-9]*(?:-[0-9]+)?)(?:\([^)]+\)|\{[^}]+\})*(?:\/[A-G](#|b)?(?:\([^)]+\)|\{[^}]+\})*)?$/i;
 const NARROW_SYMBOL_PATTERN = /^(?:[\-=≫≧＞>!~]+|n\.c\.?)$/i;
 const LOCAL_TEST_SONG_SCRIPT_PATH = './.local/local-test-song.js';
@@ -166,7 +184,16 @@ const autoScrollState = {
   dragging: null,
   hasLoadedSavedState: false,
   rewindToStartPending: false,
-  startFromMarkerPending: false
+  startFromMarkerPending: false,
+  highlightEnabled: true,
+  focusContextLines: AUTO_SCROLL_FOCUS_CONTEXT_LINES,
+  overlayScreenY: null,
+  overlayHighlightHeight: 140,
+  overlayEndAnimId: null,
+  overlayReleaseTimerId: 0,
+  overlayPhase: 'center',
+  overlayPrevScrollY: 0,
+  endCountdownTimerId: 0
 };
 
 const youtubeTitleCache = new Map();

@@ -151,6 +151,12 @@ function initializeAutoScrollUi() {
   document.getElementById('autoscroll-variable-toggle')?.addEventListener('change', (event) => {
     setAutoScrollVariableScrollEnabled(event.target.checked, { persist: true, notify: true });
   });
+  document.getElementById('autoscroll-highlight-toggle')?.addEventListener('change', (event) => {
+    setAutoScrollHighlightEnabled(event.target.checked, { persist: true, notify: true });
+  });
+  document.getElementById('autoscroll-highlight-context-lines')?.addEventListener('input', (event) => {
+    setAutoScrollFocusContextLines(event.target.value, { persist: true, notify: true });
+  });
   document.getElementById('delete-button')?.addEventListener('click', handleDeleteSong);
   document.getElementById('autoscroll-collapse-toggle')?.addEventListener('click', toggleAutoScrollCollapsed);
   document.getElementById('youtube-player-close')?.addEventListener('click', closeYouTubePlayer);
@@ -169,6 +175,7 @@ function initializeAutoScrollUi() {
 
   ensureMarkerElements();
   setDurationInputs(DEFAULT_DURATION_SEC);
+  setRemainingDisplay(DEFAULT_DURATION_SEC);
   updateAutoScrollSpeedUi();
   updateAutoScrollControls();
   setStatus('Stopped', 'info');
@@ -177,12 +184,13 @@ function initializeAutoScrollUi() {
 
   window.addEventListener('scroll', () => {
     renderMarkerPositions();
+    applyFocusOverlayTop();
 
     if (
       autoScrollState.isPlaying
       && Math.abs(window.scrollY - autoScrollState.virtualScrollY) > 3
     ) {
-      syncAutoScrollPlaybackFromScrollY(window.scrollY, { userInitiated: true });
+      syncAutoScrollPlaybackFromScrollY(window.scrollY, { fromUserScroll: true });
     }
   }, { passive: true });
 
@@ -190,6 +198,8 @@ function initializeAutoScrollUi() {
     updateAutoScrollSafeTop();
     syncCompactMarkerMode();
     renderMarkerPositions();
+    updateFocusOverlayGeometry();
+    setFocusOverlayActive(autoScrollState.isPlaying);
     refreshAutoScrollTimelineFromCurrentSettings();
 
     if (autoScrollState.isPlaying) {
@@ -241,6 +251,25 @@ function initializeSongExtrasUi() {
   });
 
   restoreSongExtrasCollapsedState();
+}
+
+function initializeSongSetlistUi() {
+  const setlistUi = window.ChordWikiSetlistUi;
+  if (!setlistUi) {
+    return;
+  }
+
+  const songId = String(getQueryParam('id') || '').trim();
+  if (!songId) {
+    return;
+  }
+
+  const root = document.getElementById('song-setlist-adder');
+  if (!root) {
+    return;
+  }
+
+  setlistUi.createSongAddPanel(root, songId);
 }
 
 function initializeDisplayPreferencesUi() {
@@ -365,6 +394,7 @@ function initializeSongPage() {
   initializeAutoScrollUi();
   initializeSongExtrasUi();
   initializeDisplayPreferencesUi();
+  initializeSongSetlistUi();
   updateTransposeDisplay();
   updateAutoScrollSafeTop();
   window.requestAnimationFrame(updateAutoScrollSafeTop);

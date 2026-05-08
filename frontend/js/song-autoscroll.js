@@ -1079,6 +1079,9 @@ function setMarkerY(markerName, docY, { persist = true, notify = true } = {}) {
   autoScrollState.rewindToStartPending = false;
   renderMarkerPositions();
   refreshAutoScrollTimelineFromCurrentSettings();
+  if (markerName === 'start') {
+    window.syncVisualMetronomeBpmFromStartMarker?.();
+  }
 
   if (autoScrollState.isPlaying && !recalculateAutoScrollSpeed()) {
     return;
@@ -2194,6 +2197,7 @@ function startAutoScroll() {
 
   autoScrollState.rewindToStartPending = false;
   autoScrollState.startFromMarkerPending = false;
+  window.restartVisualMetronomeFromFirstBeatIfRunning?.();
   autoScrollState.isPlaying = true;
   autoScrollState.startedAtMs = performance.now();
   autoScrollState.lastFrameMs = autoScrollState.startedAtMs;
@@ -2345,6 +2349,7 @@ function resetAutoScrollMarkers() {
 
   renderMarkerPositions();
   refreshAutoScrollTimelineFromCurrentSettings();
+  window.syncVisualMetronomeBpmFromStartMarker?.();
 
   if (autoScrollState.isPlaying && !recalculateAutoScrollSpeed()) {
     return;

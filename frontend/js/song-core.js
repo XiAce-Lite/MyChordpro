@@ -39,6 +39,7 @@ let transposeSemitones = 0;
 let accidentalMode = 'none';
 let songPrefsStorageKey = null;
 let songTransposeStorageKey = null;
+let metroBeatsStorageKey = null;
 let currentSongKey = '';
 let currentSongEstimatedKey = '';
 let currentSongEstimatedKeyMode = 'sharp';
@@ -51,6 +52,12 @@ let songPageState = SONG_PAGE_STATE_LOADING;
 
 const MIN_TRANSPOSE = -6;
 const MAX_TRANSPOSE = 6;
+const METRO_BPM_MIN = 30;
+const METRO_BPM_MAX = 300;
+const METRO_BEATS_MIN = 2;
+const METRO_BEATS_MAX = 6;
+const METRO_ACCENT_RATIO = 0.22;
+const METRO_BEATS_STORAGE_PREFIX = 'metroBeats:v1';
 const MAX_AUTOSCROLL_MINUTES = 99;
 const MAX_AUTOSCROLL_DURATION_SEC = (MAX_AUTOSCROLL_MINUTES * 60) + 59;
 const DEFAULT_DURATION_SEC = 4 * 60;
@@ -208,6 +215,16 @@ const youtubePlayerState = {
   currentStart: 0
 };
 
+const metroState = {
+  enabled: false,
+  bpm: null,
+  beatsPerMeasure: 4,
+  isRunning: false,
+  rafId: null,
+  startedAtMs: 0,
+  lastBeatIndex: -1
+};
+
 function setSongPageState(nextState) {
   songPageState = String(nextState || SONG_PAGE_STATE_LOADING);
   const bodyEl = document.body;
@@ -250,6 +267,406 @@ function getSongTransposeStorageKey(id) {
     return getTransposeStorageKey(id);
   }
   return '';
+}
+
+function getMetroBeatsStorageKey(artist, id) {
+  return buildSongScopedKey(METRO_BEATS_STORAGE_PREFIX, artist, id);
+}
+
+function clampMetroBeats(value) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) {
+    return 4;
+  }
+  return clamp(parsed, METRO_BEATS_MIN, METRO_BEATS_MAX);
+}
+
+function parseBpmFromText(text = '') {
+  const match = String(text || '').match(/BPM\s*=\s*([0-9]{1,3})/i);
+  if (!match || !match[1]) {
+    return null;
+  }
+
+  const bpm = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(bpm) || bpm < METRO_BPM_MIN || bpm > METRO_BPM_MAX) {
+    return null;
+  }
+
+  return bpm;
+}
+
+function normalizeChordProLines(chordProText = '') {
+  return String(chordProText || '').replace(/\r\n|\n\r|\r/g, '\n').split('\n');
+}
+
+function collectBpmCandidatesFromChordPro(chordProText = '') {
+  const lines = normalizeChordProLines(chordProText);
+  const bpmCandidates = [];
+  const renderedSourceIndices = [];
+
+  lines.forEach((rawLine, sourceIndex) => {
+    const directive = rawLine.match(/^\{\s*([^:}]+)\s*:\s*(.*)\}\s*$/);
+    if (directive) {
+      const key = String(directive[1] || '').trim().toLowerCase();
+      const value = String(directive[2] || '').trim();
+
+      const bpm = parseBpmFromText(value);
+      if (bpm && (key === 'comment' || key === 'c' || key === 'comment_italic' || key === 'ci')) {
+        bpmCandidates.push({ bpm, sourceIndex });
+      }
+
+      if (key === 'comment' || key === 'c' || key === 'comment_italic' || key === 'ci') {
+        renderedSourceIndices.push(sourceIndex);
+      }
+      return;
+    }
+
+    if (String(rawLine || '').trim() !== '') {
+      renderedSourceIndices.push(sourceIndex);
+    }
+  });
+
+  return { bpmCandidates, renderedSourceIndices };
+}
+
+function getMetroRowEl() {
+  return document.getElementById('cw-metro-row');
+}
+
+function getMetroBarEl() {
+  return document.getElementById('cw-metro-bar');
+}
+
+function getMetroFaderEl() {
+  return document.getElementById('cw-metro-fader');
+}
+
+function getMetroDotsEl() {
+  return document.getElementById('cw-metro-dots');
+}
+
+function getMetroBeatsSelectEl() {
+  return document.getElementById('cw-metro-beats');
+}
+
+function getMetroToggleButtonEl() {
+  return document.getElementById('cw-metro-toggle');
+}
+
+function getNearestSourceIndexFromStartMarker(renderedSourceIndices) {
+  const sheetEl = getSheetEl();
+  const markerY = Number(autoScrollState?.startY);
+  if (!sheetEl || !Number.isFinite(markerY) || !Array.isArray(renderedSourceIndices) || renderedSourceIndices.length === 0) {
+    return null;
+  }
+
+  const renderedEls = Array.from(sheetEl.querySelectorAll('p.line:not(.blank), p.comment'));
+  if (!renderedEls.length) {
+    return null;
+  }
+
+  let nearestIndex = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  renderedEls.forEach((lineEl, index) => {
+    const rect = lineEl.getBoundingClientRect();
+    const centerY = rect.top + window.scrollY + (rect.height / 2);
+    const distance = Math.abs(centerY - markerY);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = index;
+    }
+  });
+
+  return renderedSourceIndices[Math.min(nearestIndex, renderedSourceIndices.length - 1)] ?? null;
+}
+
+function resolveBpmForCurrentStartMarker(chordProText = '') {
+  const { bpmCandidates, renderedSourceIndices } = collectBpmCandidatesFromChordPro(chordProText);
+  if (!bpmCandidates.length) {
+    return null;
+  }
+
+  const startSourceIndex = getNearestSourceIndexFromStartMarker(renderedSourceIndices);
+  if (!Number.isFinite(startSourceIndex)) {
+    return bpmCandidates[0].bpm;
+  }
+
+  let winner = bpmCandidates[0];
+  let bestDistance = Math.abs(winner.sourceIndex - startSourceIndex);
+  for (let index = 1; index < bpmCandidates.length; index += 1) {
+    const candidate = bpmCandidates[index];
+    const distance = Math.abs(candidate.sourceIndex - startSourceIndex);
+    if (distance < bestDistance) {
+      winner = candidate;
+      bestDistance = distance;
+    }
+  }
+
+  return winner.bpm;
+}
+
+function buildMetroDots(count = 4) {
+  const dotsEl = getMetroDotsEl();
+  if (!dotsEl) {
+    return;
+  }
+
+  dotsEl.textContent = '';
+  for (let index = 0; index < count; index += 1) {
+    const dotEl = document.createElement('span');
+    dotEl.className = 'cw-metro-dot';
+    dotsEl.appendChild(dotEl);
+  }
+}
+
+function setMetroToggleLabel() {
+  const buttonEl = getMetroToggleButtonEl();
+  if (!buttonEl) {
+    return;
+  }
+  buttonEl.textContent = metroState.isRunning ? '停止' : '再開';
+}
+
+function setMetroUiEnabled(enabled) {
+  const rowEl = getMetroRowEl();
+  const beatsEl = getMetroBeatsSelectEl();
+  const toggleEl = getMetroToggleButtonEl();
+  const isEnabled = Boolean(enabled);
+
+  rowEl?.classList.toggle('is-disabled', !isEnabled);
+  if (beatsEl) {
+    beatsEl.disabled = !isEnabled;
+  }
+  if (toggleEl) {
+    toggleEl.disabled = !isEnabled;
+  }
+  setMetroToggleLabel();
+}
+
+function resetMetroVisuals() {
+  const rowEl = getMetroRowEl();
+  const barEl = getMetroBarEl();
+  const faderEl = getMetroFaderEl();
+  const dots = Array.from(getMetroDotsEl()?.querySelectorAll('.cw-metro-dot') || []);
+  const barWidth = barEl?.clientWidth || 0;
+  const faderWidth = faderEl?.offsetWidth || 16;
+  const range = Math.max(0, barWidth - faderWidth);
+
+  if (faderEl) {
+    faderEl.style.transform = `translate(${range}px, -50%)`;
+  }
+
+  rowEl?.classList.remove('is-accent');
+  dots.forEach((dot, index) => {
+    dot.classList.toggle('is-active', index === 0);
+    dot.classList.toggle('is-accent', index === 0);
+  });
+}
+
+function saveMetroBeatsPreference() {
+  if (!metroBeatsStorageKey) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(metroBeatsStorageKey, String(metroState.beatsPerMeasure));
+  } catch (error) {
+    console.warn('Failed to save metronome beats preference:', error);
+  }
+}
+
+function restoreMetroBeatsPreference() {
+  metroState.beatsPerMeasure = 4;
+  const beatsEl = getMetroBeatsSelectEl();
+  if (!metroBeatsStorageKey) {
+    if (beatsEl) {
+      beatsEl.value = String(metroState.beatsPerMeasure);
+    }
+    buildMetroDots(metroState.beatsPerMeasure);
+    resetMetroVisuals();
+    return;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(metroBeatsStorageKey);
+    metroState.beatsPerMeasure = clampMetroBeats(raw);
+  } catch (error) {
+    console.warn('Failed to restore metronome beats preference:', error);
+    metroState.beatsPerMeasure = 4;
+  }
+
+  if (beatsEl) {
+    beatsEl.value = String(metroState.beatsPerMeasure);
+  }
+  buildMetroDots(metroState.beatsPerMeasure);
+  resetMetroVisuals();
+}
+
+function updateMetroFrame(frameNowMs) {
+  if (!metroState.isRunning || !metroState.enabled) {
+    return;
+  }
+
+  const beatDurationMs = 60000 / metroState.bpm;
+  if (!Number.isFinite(beatDurationMs) || beatDurationMs <= 0) {
+    return;
+  }
+
+  const elapsedMs = Math.max(0, frameNowMs - metroState.startedAtMs);
+  const beatFloat = elapsedMs / beatDurationMs;
+  const beatStep = Math.floor(beatFloat);
+  const beatProgress = beatFloat - beatStep;
+  const activeBeatIndex = beatStep % metroState.beatsPerMeasure;
+  const shouldAccentBlink = activeBeatIndex === 0 && beatProgress < METRO_ACCENT_RATIO;
+
+  const rowEl = getMetroRowEl();
+  const barEl = getMetroBarEl();
+  const faderEl = getMetroFaderEl();
+  const dots = Array.from(getMetroDotsEl()?.querySelectorAll('.cw-metro-dot') || []);
+  const directionForward = (beatStep % 2) === 0;
+  const phase = directionForward ? beatProgress : (1 - beatProgress);
+  const barWidth = barEl?.clientWidth || 0;
+  const faderWidth = faderEl?.offsetWidth || 16;
+  const range = Math.max(0, barWidth - faderWidth);
+  const positionX = Math.max(0, Math.min(range, range * phase));
+
+  if (faderEl) {
+    faderEl.style.transform = `translate(${positionX}px, -50%)`;
+  }
+
+  metroState.lastBeatIndex = activeBeatIndex;
+  rowEl?.classList.toggle('is-accent', shouldAccentBlink);
+  dots.forEach((dotEl, index) => {
+    dotEl.classList.toggle('is-active', index === activeBeatIndex);
+    dotEl.classList.toggle('is-accent', index === 0 && shouldAccentBlink);
+  });
+
+  metroState.rafId = window.requestAnimationFrame(updateMetroFrame);
+}
+
+function stopVisualMetronome() {
+  if (metroState.rafId) {
+    window.cancelAnimationFrame(metroState.rafId);
+  }
+  metroState.rafId = null;
+  metroState.isRunning = false;
+  metroState.lastBeatIndex = -1;
+  setMetroToggleLabel();
+}
+
+function startVisualMetronomeFromFirstBeat() {
+  if (!metroState.enabled || !Number.isFinite(metroState.bpm)) {
+    return;
+  }
+
+  stopVisualMetronome();
+  metroState.isRunning = true;
+  metroState.startedAtMs = performance.now();
+  metroState.lastBeatIndex = -1;
+  resetMetroVisuals();
+  setMetroToggleLabel();
+  metroState.rafId = window.requestAnimationFrame(updateMetroFrame);
+}
+
+function toggleVisualMetronome() {
+  if (!metroState.enabled) {
+    return;
+  }
+
+  if (metroState.isRunning) {
+    stopVisualMetronome();
+    return;
+  }
+
+  startVisualMetronomeFromFirstBeat();
+}
+
+function setupVisualMetronomeForSong(chordProText = '', artist = '', id = '') {
+  metroBeatsStorageKey = getMetroBeatsStorageKey(artist, id);
+  restoreMetroBeatsPreference();
+
+  const bpm = resolveBpmForCurrentStartMarker(chordProText);
+  metroState.bpm = bpm;
+  metroState.enabled = Number.isFinite(bpm);
+  setMetroUiEnabled(metroState.enabled);
+
+  if (!metroState.enabled) {
+    stopVisualMetronome();
+    resetMetroVisuals();
+    return;
+  }
+
+  startVisualMetronomeFromFirstBeat();
+}
+
+function syncVisualMetronomeBpmFromStartMarker() {
+  if (!originalChordPro) {
+    return;
+  }
+
+  const wasRunning = metroState.isRunning;
+  const nextBpm = resolveBpmForCurrentStartMarker(originalChordPro);
+  const enabled = Number.isFinite(nextBpm);
+
+  metroState.bpm = nextBpm;
+  metroState.enabled = enabled;
+  setMetroUiEnabled(enabled);
+
+  if (!enabled) {
+    stopVisualMetronome();
+    resetMetroVisuals();
+    return;
+  }
+
+  if (wasRunning) {
+    startVisualMetronomeFromFirstBeat();
+    return;
+  }
+
+  stopVisualMetronome();
+  resetMetroVisuals();
+}
+
+function restartVisualMetronomeFromFirstBeat() {
+  if (!metroState.enabled || !Number.isFinite(metroState.bpm)) {
+    return;
+  }
+  startVisualMetronomeFromFirstBeat();
+}
+
+function restartVisualMetronomeFromFirstBeatIfRunning() {
+  if (!metroState.isRunning) {
+    return;
+  }
+  restartVisualMetronomeFromFirstBeat();
+}
+
+function initializeVisualMetronomeUi() {
+  const beatsEl = getMetroBeatsSelectEl();
+  const toggleEl = getMetroToggleButtonEl();
+
+  beatsEl?.addEventListener('change', (event) => {
+    metroState.beatsPerMeasure = clampMetroBeats(event.target.value);
+    event.target.value = String(metroState.beatsPerMeasure);
+    buildMetroDots(metroState.beatsPerMeasure);
+    saveMetroBeatsPreference();
+    if (metroState.enabled) {
+      startVisualMetronomeFromFirstBeat();
+    } else {
+      resetMetroVisuals();
+    }
+  });
+
+  toggleEl?.addEventListener('click', toggleVisualMetronome);
+  buildMetroDots(metroState.beatsPerMeasure);
+  resetMetroVisuals();
+  setMetroUiEnabled(false);
+}
+
+if (typeof window !== 'undefined') {
+  window.syncVisualMetronomeBpmFromStartMarker = syncVisualMetronomeBpmFromStartMarker;
+  window.restartVisualMetronomeFromFirstBeat = restartVisualMetronomeFromFirstBeat;
+  window.restartVisualMetronomeFromFirstBeatIfRunning = restartVisualMetronomeFromFirstBeatIfRunning;
 }
 
 function isLocalFilePreview() {
@@ -1460,6 +1877,7 @@ function renderLoadedSong(song = {}, fallbackArtist = '', fallbackId = '') {
   renderSongSideRail(currentSongData, displayTitle, displayArtist);
   applyChordLayoutAdjustments();
   refreshAutoScrollAfterRender({ restoreSavedState: true });
+  setupVisualMetronomeForSong(originalChordPro, currentSongData.artist, currentSongData.id);
   refreshSongAnnotationsAfterRender({
     artist: currentSongData.artist,
     id: currentSongData.id,

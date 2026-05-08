@@ -392,6 +392,7 @@ function initializeSongPage() {
   window.ChordWikiAuth?.applyRoleVisibility();
   initializeSongAnnotationsUi();
   initializeAutoScrollUi();
+  initializeVisualMetronomeUi();
   initializeSongExtrasUi();
   initializeDisplayPreferencesUi();
   initializeSongSetlistUi();

@@ -113,7 +113,8 @@
 - 一覧 / ランキング / 検索 API
 - 編集 API
 - 閲覧スコア更新 API
-- オートスクロール参考時間推定 API
+- オートスクロール参考時間推定 API（`youtube/search-duration`）
+- （セットリスト用の Azure Functions は **本リポジトリでは提供しない**。フロントは localStorage のみ）
 
 ↓  
 
@@ -137,7 +138,7 @@
 - API ゲートウェイとして Azure Functions を内包
 - ルート制御
 
-  - `authenticated`：トップ / 曲ページ / 編集画面 / API へアクセス可
+  - `authenticated`：トップ / 曲ページ / 編集画面 / セットリスト画面 / API へアクセス可
 
 ### 3.2 Azure Functions
 
@@ -171,10 +172,13 @@
 3. サインイン後、`authenticated` ロールで閲覧可能
 4. API は `x-ms-client-principal` の `userId` を `ownerId` として使用し、ユーザーごとにデータ分離する
 
-### 4.2 ロール付与
+### 4.2 ロール付与と UI フラグ
 
-- 基本ロール：`authenticated`
-- 画面上の `editor-only` 要素は、`/.auth/me` の `userId` 有無をもとに表示制御する
+- Static Web Apps 上の基本ロールは **`authenticated`**
+- 個人用アプリのため、`frontend/js/runtime-config.js` の **`alwaysEnableEditorUi: true`** が有効
+- このとき `frontend/js/auth.js` の `isEditor()` は **常に `true`** を返し、
+  `.editor-only` 要素（新規追加・セットリスト作成ボタン等）は **ログイン後は原則として表示**される
+- データの分離は API 側で `x-ms-client-principal` の `userId` を `ownerId` として用いる
 
 ### 4.3 ルーティング制御（`frontend/staticwebapp.config.json`）
 
@@ -185,6 +189,8 @@
 | `/song.html`, `/song/*` | `authenticated` | 曲詳細表示 |
 | `/add.html` | 公開（302 リダイレクト） | `/edit.html?mode=add` へ誘導 |
 | `/edit.html`, `/edit/*` | `authenticated` | 登録・編集画面 |
+| `/setlists.html` | `authenticated` | セットリスト管理（データは localStorage） |
+| `/setlists/*` | `authenticated` | 将来のパス拡張用（現状は単一 HTML 運用） |
 | `/api/*` | `authenticated` | API 全体 |
 | `/login` | 公開 | `/.auth/login/github` へリダイレクト |
 | `/logout` | 公開 | `/.auth/logout` へリダイレクト |
@@ -192,7 +198,10 @@
 ### 4.4 フロントエンドの権限反映
 
 - `frontend/js/auth.js` で `/.auth/me` を参照し、`editor-only` 要素の表示/非表示を切り替える
-- 現在の実装ではロール名ではなく `clientPrincipal.userId` の有無で UI 表示を制御する
+- **`alwaysEnableEditorUi: true` のとき**は `getClientPrincipal()` を待たず `isEditor()` が **常に `true`** を返す
+- そのため **`userId` の有無では編集 UI を切り替えない**（個人用アプリ向けの簡略化）
+- 本番では Static Web Apps のルート制御により未ログインでは保護ページに届かないが、
+  **ローカル HTTP / `file://` では `/.auth/me` が使えなくても `editor-only` が表示される**ことがある
 
 ---
 
@@ -236,6 +245,7 @@
 ```json
 {
   "id": "test-uuid",
+  "ownerId": "github|123456",
   "slug": "test-song",
   "title": "テスト曲",
   "artist": "テスト",
@@ -360,6 +370,13 @@
 - タイムアウトや解析失敗時は `found: false` で
   安全にフォールバックする
 
+### 6.8 セットリスト（フロントのみ・REST なし）
+
+- UI は `setlists.html` と `frontend/js/shared/setlists.js` / `setlist-ui.js` を用いる
+- `ChordWikiRuntime.setlistsCloudSyncEnabled` が **`false`**（`runtime-config.js` 既定）のとき、
+  **Cosmos への `/api/setlists` 同期は行わず**、localStorage（キー `mcp_setlists:v1`）のみで保持する
+- ChordWiki Personal リポジトリでは同一共有モジュールを **REST 同期あり**で運用している点が最大の差分である
+
 ---
 
 ## 7. フロントエンド設計
@@ -370,6 +387,7 @@
 | --- | --- |
 | `/` | トップページ（ランキング / 検索） |
 | `/song.html` | 曲詳細表示 |
+| `/setlists.html` | セットリスト管理（localStorage のみ） |
 | `/edit.html?mode=add` | 新規登録 |
 | `/edit.html?mode=edit&artist=...&id=...` | 既存曲編集 |
 | `/403.html` | 権限エラー |
@@ -386,7 +404,8 @@
 - ページボタンは **実在するページ数だけ** を表示する
 - `MyChordpro` タイトルと `✕ クリア` から
   ランキング初期表示へ戻れる
-- `editor-only` 要素として「新規追加」ボタンを表示する（実装上は `userId` 有無で表示切替）
+- 「セットリスト」ボタンから `/setlists.html` へ移動できる
+- `editor-only` 要素として「新規追加」ボタンを表示する（`alwaysEnableEditorUi: true` により **ログイン後は常に表示**。詳細は §4.4）
 - ローカルプレビュー時は `runtime-config.js` により
   `http://localhost:7071` を自動参照し、API が使えない場合は
   `.local/local-test-songs.js` へフォールバックする

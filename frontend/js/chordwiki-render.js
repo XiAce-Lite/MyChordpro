@@ -54,11 +54,48 @@ function isNoChordToken(token) {
   return t === "N.C." || t === "N.C" || t === "NC";
 }
 
+function normalizeChordToken(token) {
+  return String(token || "")
+    .replace(/（/g, "(")
+    .replace(/）/g, ")");
+}
+
 function createSpan(className, text) {
   const s = document.createElement("span");
   if (className) s.className = className;
   if (text != null) s.textContent = text;
   return s;
+}
+
+const VOICE_MARKER_PATTERN = /[\u2660\u2663\u2665\u2666]/u; // ♠♣♥♦
+const VOICE_MARKER_CLASS_MAP = Object.freeze({
+  '\u2660': 'male',
+  '\u2663': 'male2',
+  '\u2665': 'female',
+  '\u2666': 'female2'
+});
+
+function applyVoiceMarkers(spanEl) {
+  const raw = String(spanEl.textContent || '');
+  if (!VOICE_MARKER_PATTERN.test(raw)) {
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const ch of raw) {
+    const cls = VOICE_MARKER_CLASS_MAP[ch];
+    if (cls) {
+      const marker = document.createElement('span');
+      marker.className = cls;
+      marker.textContent = ch;
+      fragment.appendChild(marker);
+    } else {
+      fragment.appendChild(document.createTextNode(ch));
+    }
+  }
+
+  spanEl.textContent = '';
+  spanEl.appendChild(fragment);
 }
 
 /**
@@ -76,11 +113,15 @@ function tokenizeLyricsLine(lineText) {
       if (end !== -1) {
         tokens.push({
           kind: "chord",
-          text: line.slice(i + 1, end)
+          text: normalizeChordToken(line.slice(i + 1, end))
         });
         i = end + 1;
         continue;
       }
+      // 閉じ ] がない → [ 以降を歌詞として扱い終了（無限ループ防止）
+      const rest = line.slice(i);
+      if (rest.length > 0) tokens.push({ kind: "word", text: rest });
+      break;
     }
 
     let j = i;
@@ -111,6 +152,7 @@ function renderCommentLine(text, containerEl, isItalic = false) {
   p.className = isItalic ? "comment ci" : "comment";
 
   const body = createSpan("comment-body", text || "");
+  applyVoiceMarkers(body);
   p.appendChild(body);
   containerEl.appendChild(p);
 }
@@ -127,9 +169,17 @@ function renderLyricsLine(tokens, containerEl, options = {}) {
 
   for (const token of tokens || []) {
     const span = createSpan(token.kind);
-    span.textContent = token.kind === "chord"
-      ? transposeChordString(token.text, transposeSemitones, accidentalMode, keyContext)
-      : (token.text || "");
+    if (token.kind === "chord") {
+      const raw = transposeChordString(token.text, transposeSemitones, accidentalMode, keyContext);
+      if (typeof displayPrefsState !== "undefined" && displayPrefsState.superscriptEnabled) {
+        span.innerHTML = convertChordToSuperscriptHtml(raw);
+      } else {
+        span.textContent = raw;
+      }
+    } else {
+      span.textContent = token.text || "";
+      applyVoiceMarkers(span);
+    }
     p.appendChild(span);
   }
 
@@ -422,13 +472,24 @@ function splitSlashOrOn(chord) {
 function transposeChordString(chord, semitones = 0, accidentalMode = "none", keyContext = null) {
   if (!chord) return chord;
 
-  const trimmed = chord.trim();
+  const normalizedChord = normalizeChordToken(chord);
+  const trimmed = normalizedChord.trim();
   if (trimmed === "" || isNoChordToken(trimmed) || isBarToken(trimmed)) {
-    return chord;
+    return normalizedChord;
   }
 
   if (normalizeAccidentalMode(accidentalMode) === "none" && semitones === 0) {
-    return chord;
+    return normalizedChord;
+  }
+
+  // ()で囲まれた通常コード（例: (Eb), (EbM7)）は内側を移調して再ラップする
+  if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+    const inner = trimmed.slice(1, -1);
+    if (/^[A-G]/.test(inner)) {
+      const transposedInner = transposeChordString(inner, semitones, accidentalMode, keyContext);
+      return `(${transposedInner})`;
+    }
+    return normalizedChord;
   }
 
   const resolvedMode = resolveAccidentalMode(trimmed, semitones, accidentalMode, keyContext);
@@ -475,12 +536,6 @@ function renderChordWikiLike(chordProText, containerEl, transposeSemitones = 0, 
   }
 
   return { title: parsed.title, subtitle: parsed.subtitle, key: parsed.key };
-}
-
-function normalizeChordToken(token) {
-  return String(token || "")
-    .replace(/（/g, "(")
-    .replace(/）/g, ")");
 }
 
 function escapeHtml(text) {

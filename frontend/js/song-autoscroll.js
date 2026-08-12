@@ -121,7 +121,7 @@ async function maybeEstimateAutoScrollDuration(song, displayTitle = '', displayA
   autoScrollEstimateState.inFlight = true;
 
   try {
-    const endpoint = buildApiUrl(`/api/youtube/search-duration?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`);
+    const endpoint = buildApiUrl(`/api/duration/estimate?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`);
     const response = await fetch(endpoint, { credentials: 'include' });
     if (!response.ok) {
       return;
@@ -142,11 +142,19 @@ async function maybeEstimateAutoScrollDuration(song, displayTitle = '', displayA
       return;
     }
 
+    const sourceMap = {
+      itunes: 'iTunes',
+      musicbrainz: 'MusicBrainz',
+      youtube: 'YouTube',
+      default: '該当なし'
+    };
+    const sourceLabel = sourceMap[String(payload?.source || 'default')] || '不明';
+
     autoScrollState.durationSec = estimatedSec;
     setDurationInputs(estimatedSec);
     saveAutoScrollState({ notify: false });
     setRemainingDisplay(autoScrollState.durationSec);
-    setStatus(`Estimated · ${formatDuration(estimatedSec)} · YouTube参考値`, 'success');
+    setStatus(`Estimated · ${formatDuration(estimatedSec)} · ${sourceLabel}`, 'success');
   } catch (error) {
     console.warn('Failed to estimate auto-scroll duration:', error);
   } finally {

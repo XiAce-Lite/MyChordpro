@@ -9,7 +9,7 @@
   <link rel="icon" href="/favicon-dark.svg" type="image/svg+xml" sizes="any" media="(prefers-color-scheme: dark)" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@0..1" />
   <link rel="stylesheet" href="css/setlists.css?v=20260508-mycp-setlists1" />
-  <link rel="stylesheet" href="css/chordwiki-song.css?v=20260514-songhead1" />
+  <link rel="stylesheet" href="css/chordwiki-song.css?v=20260812-barfeatures1" />
 </head>
 <body>
   <div class="container">
@@ -205,6 +205,24 @@
               </span>
             </div>
 
+            <div class="display-toggle-option display-toggle-option-with-help">
+              <input id="display-extend-bar" type="checkbox" />
+              <label for="display-extend-bar" class="display-toggle-label">コード行に|を延伸</label>
+              <span class="display-help">
+                <button type="button" class="display-help-button" aria-label="コード行に|を延伸の説明">?</button>
+                <span class="display-help-tooltip" role="tooltip">歌詞行へ移した小節線（|）を、コード行の高さまで細い縦線として伸ばして表示します。</span>
+              </span>
+            </div>
+
+            <div class="display-toggle-option display-toggle-option-with-help">
+              <input id="display-align-measure-bars" type="checkbox" />
+              <label for="display-align-measure-bars" class="display-toggle-label">ブロック内の小節線を揃える</label>
+              <span class="display-help">
+                <button type="button" class="display-help-button" aria-label="ブロック内の小節線を揃えるの説明">?</button>
+                <span class="display-help-tooltip" role="tooltip">空行やコメント行で区切られたコード譜を1ブロックとみなし、その中で小節の列幅を揃えます。小節内は余白を拍（コード＋歌詞）へ均等に振り、歌詞は折り返しません。小節数が不揃いな譜面ではオフ推奨です。</span>
+              </span>
+            </div>
+
             <div class="display-select-option">
               <label class="display-toggle-label" for="display-chord-style">コード表示</label>
               <select id="display-chord-style" class="display-chord-style-select">
@@ -359,12 +377,12 @@
   <script src="js/shared/setlists.js?v=20260508-mycp-setlists1"></script>
   <script src="js/shared/setlist-ui.js?v=20260508-mycp-setlists1"></script>
   <script src="js/shared/song-utils.js?v=20260411-youtubevalidation1"></script>
-  <script src="js/chordwiki-render.js?v=20260410-refactor1"></script>
+  <script src="js/chordwiki-render.js?v=20260812-render1"></script>
   <script src="js/auth.js?v=20260410-refactor1"></script>
-  <script src="js/song-core.js?v=20260414-autoscroll1"></script>
+  <script src="js/song-core.js?v=20260812-barfeatures1"></script>
   <script src="js/song-extras.js?v=20260411-youtubevalidation1"></script>
-  <script src="js/song-autoscroll.js?v=20260414-autoscroll1"></script>
+  <script src="js/song-autoscroll.js?v=20260812-duration1"></script>
   <script src="js/song-annotations.js?v=20260414-storagekeys1"></script>
-  <script src="js/song.js?v=20260411-annotations1"></script>
+  <script src="js/song.js?v=20260812-barfeatures1"></script>
 </body>
 </html>

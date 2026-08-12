@@ -111,7 +111,8 @@
 - `GET /api/song`
 - `POST /api/songs-view/{id?}`
 - `POST|PUT|DELETE /api/edit-song`
-- `GET /api/youtube/search-duration`（参考時間推定）
+- `GET /api/duration/estimate`（参考時間推定。iTunes → MusicBrainz → YouTube）
+- `GET /api/youtube/search-duration`（YouTube のみ・レガシー）
 
 ### 4.2 非採用 API
 

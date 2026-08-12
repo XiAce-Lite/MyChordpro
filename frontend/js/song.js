@@ -278,6 +278,8 @@ function initializeDisplayPreferencesUi() {
 
   const enabledInput = document.getElementById('display-custom-enabled');
   const adjustInput = document.getElementById('display-adjust-chordpos');
+  const extendBarInput = document.getElementById('display-extend-bar');
+  const alignMeasureInput = document.getElementById('display-align-measure-bars');
   const chordStyleSelect = document.getElementById('display-chord-style');
   const fontSizeInput = document.getElementById('display-chord-font-size');
   const offsetInput = document.getElementById('display-chord-offset');
@@ -345,6 +347,16 @@ function initializeDisplayPreferencesUi() {
 
   adjustInput?.addEventListener('change', () => {
     displayPrefsState.adjustChordPos = adjustInput.checked;
+    commitDisplayPreferences();
+  });
+
+  extendBarInput?.addEventListener('change', () => {
+    displayPrefsState.extendBarUpward = extendBarInput.checked;
+    commitDisplayPreferences();
+  });
+
+  alignMeasureInput?.addEventListener('change', () => {
+    displayPrefsState.alignMeasureBars = alignMeasureInput.checked;
     commitDisplayPreferences();
   });
 

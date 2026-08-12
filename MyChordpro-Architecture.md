@@ -113,7 +113,7 @@
 - 一覧 / ランキング / 検索 API
 - 編集 API
 - 閲覧スコア更新 API
-- オートスクロール参考時間推定 API（`youtube/search-duration`）
+- オートスクロール参考時間推定 API（`duration/estimate`。レガシーとして `youtube/search-duration` も残す）
 - （セットリスト用の Azure Functions は **本リポジトリでは提供しない**。フロントは localStorage のみ）
 
 ↓  
@@ -275,7 +275,8 @@
 | GET | `/api/song` | authenticated | 曲詳細取得 |
 | POST | `/api/songs-view/{id?}` | authenticated | 閲覧スコア更新 |
 | POST / PUT / DELETE | `/api/edit-song` | authenticated | 作成 / 更新 / 削除 |
-| GET | `/api/youtube/search-duration` | authenticated | 参考時間推定 |
+| GET | `/api/duration/estimate` | authenticated | 参考時間推定（iTunes → MusicBrainz → YouTube） |
+| GET | `/api/youtube/search-duration` | authenticated | 参考時間推定（YouTube のみ・レガシー） |
 
 ### 6.2 曲取得 API
 
@@ -352,13 +353,15 @@
 
 ### 6.7 オートスクロール参考時間推定 API
 
-- `GET /api/youtube/search-duration?title=...&artist=...`
+- 曲ページの自動推定は `GET /api/duration/estimate?title=...&artist=...` を使う
+- 試行順は **iTunes → MusicBrainz → YouTube**。成功時は `source`（`itunes` / `musicbrainz` / `youtube`）と `durationSec` を返す
+- `GET /api/youtube/search-duration` は YouTube のみのレガシーエンドポイントとして残す
 - 用途は **参考値取得のみ**。DB には保存しない
 - タイトルは Cosmos DB の `title` を正とし、
   `（...）`, `(...)`, `【...】`, `[...]` は検索前に除去する
 - アーティスト名は Cosmos DB の `artist` をそのまま使用し、
   ChordPro の `subtitle` には依存しない
-- YouTube 検索結果を上位数件だけ参照し、
+- YouTube フォールバック時は検索結果を上位数件だけ参照し、
   以下で簡易スコアリングする
 
   - 曲タイトル一致を優先

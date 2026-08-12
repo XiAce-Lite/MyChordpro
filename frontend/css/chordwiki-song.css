@@ -1959,6 +1959,67 @@ html[data-display-custom="on"] .song-key {
   vertical-align: top;
 }
 
+/* 歌詞行の | をコード行まで延伸 / ブロック内小節線揃え */
+.cw-sheet p.line {
+  overflow: visible;
+}
+
+.cw-sheet span.rc-bar-extend {
+  overflow: visible;
+}
+
+.cw-sheet span.rc-bar-extend-glyph {
+  position: relative;
+  display: inline-block;
+  width: 0.35em;
+  height: 1em;
+  margin-left: 0.35em;
+  margin-right: 0.35em;
+  vertical-align: baseline;
+  overflow: visible;
+  color: inherit;
+}
+
+.cw-sheet span.rc-bar-extend-glyph::before {
+  content: '';
+  position: absolute;
+  left: var(--rc-bar-snap-x, 0px);
+  width: var(--rc-bar-hair-w, 1px);
+  bottom: -0.2em;
+  height: calc(1em + var(--rc-bar-extend-up, 1.5em));
+  background: currentColor;
+  pointer-events: none;
+}
+
+.cw-sheet span.rc-measure-bar {
+  display: inline-block;
+  margin-left: 0.35em;
+  margin-right: 0.35em;
+}
+
+.cw-sheet span.rc-measure {
+  display: inline-flex;
+  justify-content: flex-start;
+  align-items: baseline;
+  vertical-align: baseline;
+  box-sizing: border-box;
+}
+
+.cw-sheet span.rc-beat {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  flex: 1 0 auto;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.cw-sheet span.rc-beat > span.word,
+.cw-sheet span.rc-beat > span.wordtop,
+.cw-sheet span.rc-beat > span.chord {
+  white-space: nowrap;
+}
+
 .autoscroll-marker-layer {
   position: fixed;
   inset: 0;

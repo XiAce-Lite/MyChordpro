@@ -107,13 +107,17 @@ const NARROW_SYMBOL_PATTERN = /^(?:[\-=≫≧＞>!~]+|n\.c\.?)$/i;
 const LOCAL_TEST_SONG_SCRIPT_PATH = './.local/local-test-song.js';
 const LOCAL_TEST_SONG_GLOBAL_KEY = '__LOCAL_TEST_SONG__';
 const LOCAL_TEST_SONG_LIBRARY_GLOBAL_KEY = '__LOCAL_TEST_SONG_LIBRARY__';
-const VOICE_MARKER_PATTERN = /[♠♣♥♦]/u;
-const VOICE_MARKER_CLASS_MAP = Object.freeze({
-  '♠': 'male',
-  '♣': 'male2',
-  '♥': 'female',
-  '♦': 'female2'
-});
+// VOICE_MARKER_PATTERN / VOICE_MARKER_CLASS_MAP は chordwiki-render.js で定義
+const SCORE_LINE_SELECTOR = 'p.line:not(.blank)';
+const LYRICS_SPAN_SELECTOR = 'span.word, span.wordtop';
+const VOICE_PART_SELECTOR = '.male, .male2, .female, .female2';
+const RC_BAR_EXTEND_CLASS = 'rc-bar-extend';
+const RC_BAR_EXTEND_GLYPH_CLASS = 'rc-bar-extend-glyph';
+const RC_MEASURE_CLASS = 'rc-measure';
+const RC_MEASURE_BAR_CLASS = 'rc-measure-bar';
+const RC_BEAT_CLASS = 'rc-beat';
+const MEASURE_BAR_SELECTOR = `span.${RC_BAR_EXTEND_GLYPH_CLASS}, span.${RC_MEASURE_BAR_CLASS}`;
+const BLOCK_BOUNDARY_SELECTOR = 'p.line.blank, p.comment';
 const MNOTO_FONT_CANDIDATES = Object.freeze([
   '"MNoto Sans alpha V2"',
   '"MNoto Sans alpha"',
@@ -130,6 +134,8 @@ const mnotoAvailabilityState = {
 const DEFAULT_DISPLAY_PREFS = Object.freeze({
   enabled: false,
   adjustChordPos: true,
+  extendBarUpward: false,
+  alignMeasureBars: false,
   chordStyle: 'none',
   mnotoEnabled: false,
   superscriptEnabled: false,
@@ -1063,6 +1069,8 @@ function loadDisplayPreferences() {
 
     displayPrefsState.enabled = storedPrefs.enabled === true;
     displayPrefsState.adjustChordPos = storedPrefs.adjustChordPos !== false;
+    displayPrefsState.extendBarUpward = storedPrefs.extendBarUpward === true;
+    displayPrefsState.alignMeasureBars = storedPrefs.alignMeasureBars === true;
     if (typeof storedPrefs.chordStyle === 'string') {
       displayPrefsState.chordStyle = normalizeChordStyle(storedPrefs.chordStyle);
     } else if (storedPrefs.superscriptEnabled === true) {
@@ -1203,6 +1211,18 @@ function syncDisplayPreferenceUi() {
   if (adjustInput) {
     adjustInput.checked = displayPrefsState.adjustChordPos;
     adjustInput.disabled = !displayPrefsState.enabled;
+  }
+
+  const extendBarInput = document.getElementById('display-extend-bar');
+  if (extendBarInput) {
+    extendBarInput.checked = displayPrefsState.extendBarUpward === true;
+    extendBarInput.disabled = !displayPrefsState.enabled;
+  }
+
+  const alignMeasureInput = document.getElementById('display-align-measure-bars');
+  if (alignMeasureInput) {
+    alignMeasureInput.checked = displayPrefsState.alignMeasureBars === true;
+    alignMeasureInput.disabled = !displayPrefsState.enabled;
   }
 
   if (chordStyleSelect) {
@@ -1403,42 +1423,71 @@ function findPreviousLyricElement(wordtop) {
   return null;
 }
 
-function mergeOverflowTextIntoLine(lineEl, previousWord, overflowText) {
-  if (!lineEl || !overflowText) {
+function isOverflowLyricsText(cleanedText) {
+  return (
+    cleanedText.length > 1
+    && cleanedText.endsWith('|')
+    && /[^|]/.test(cleanedText)
+    && !cleanedText.startsWith('|')
+  );
+}
+
+// 行頭が chord より先の wordtop（コード行に | が残る場合のはみ出し典型）
+function isLineLeadingWordtop(wordtop) {
+  const line = wordtop.parentElement;
+  if (!line || !line.matches?.('p.line') || line.classList.contains('blank')) {
     return false;
   }
 
-  const wordSpans = Array.from(lineEl.querySelectorAll('span.word'));
-  const lyricSpans = Array.from(lineEl.children).filter((child) => isLyricSpanElement(child));
-  let targetSpan = wordSpans[wordSpans.length - 1] || null;
-
-  if (!targetSpan && isLyricSpanElement(previousWord)) {
-    targetSpan = previousWord;
+  for (const child of line.children) {
+    if (child === wordtop) {
+      return true;
+    }
+    if (child.classList?.contains('chord') || isLyricSpanElement(child)) {
+      return false;
+    }
   }
+  return false;
+}
 
-  if (!targetSpan && lyricSpans.length > 0) {
-    targetSpan = lyricSpans[lyricSpans.length - 1];
+function isOverflowWordtopCandidate(wordtop) {
+  const cleanedText = cleanDisplayText(wordtop.textContent);
+  if (!cleanedText || cleanedText === '|') {
+    return false;
   }
-
-  if (!targetSpan) {
-    targetSpan = document.createElement('span');
-    targetSpan.className = lyricSpans.length === 0 ? 'wordtop' : 'word';
-    lineEl.appendChild(targetSpan);
+  if (cleanedText.startsWith('|')) {
+    return false;
   }
-
-  const existingText = String(targetSpan.textContent || '');
-  const trimmedText = existingText.replace(/\s+$/, '');
-
-  if (/\|$/.test(trimmedText)) {
-    const textWithoutBar = trimmedText.replace(/\|+$/, '').replace(/\s+$/, '');
-    const separator = textWithoutBar ? ' ' : '';
-    targetSpan.textContent = `${textWithoutBar}${separator}${overflowText} | `;
+  if (isOverflowLyricsText(cleanedText)) {
     return true;
   }
+  return isLineLeadingWordtop(wordtop) && /[^|]/.test(cleanedText);
+}
 
-  const separator = trimmedText ? ' ' : '';
-  targetSpan.textContent = `${trimmedText}${separator}${overflowText}`;
-  return true;
+function stripTrailingBarFromLyricElement(el) {
+  if (!el) {
+    return;
+  }
+
+  if (el.querySelector(VOICE_PART_SELECTOR) || el.children.length > 0) {
+    for (let node = el.lastChild; node; node = node.previousSibling) {
+      if (node.nodeType !== Node.TEXT_NODE) {
+        continue;
+      }
+      const next = String(node.nodeValue || '').replace(/\|\s*$/, '');
+      if (next !== node.nodeValue) {
+        if (next) {
+          node.nodeValue = next;
+        } else {
+          node.remove();
+        }
+      }
+      break;
+    }
+    return;
+  }
+
+  el.textContent = String(el.textContent || '').replace(/\|\s*$/, '');
 }
 
 function normalizeChordBarSpans() {
@@ -1475,6 +1524,53 @@ function normalizeChordBarSpans() {
   });
 }
 
+// 前行末尾へはみ出し歌詞を載せる（生テキストノードは使わず | を lyrics span 内に残す）
+function appendOverflowLyricsToLine(parentP, overflowText, options = {}) {
+  if (!parentP || !overflowText) {
+    return false;
+  }
+
+  const appendBar = options.appendBar === true;
+  const lastElem = parentP.lastElementChild;
+  let hadTrailingBarOnLyric = false;
+
+  if (
+    lastElem
+    && isLyricSpanElement(lastElem)
+    && lastElem.textContent
+    && /\|\s*$/.test(lastElem.textContent)
+  ) {
+    hadTrailingBarOnLyric = true;
+    stripTrailingBarFromLyricElement(lastElem);
+  }
+
+  let suffix;
+  if (appendBar || hadTrailingBarOnLyric) {
+    suffix = hadTrailingBarOnLyric
+      ? ` ${overflowText} |`
+      : ` ${overflowText} | `;
+  } else {
+    suffix = ` ${overflowText}`;
+  }
+
+  if (
+    lastElem
+    && lastElem.isConnected
+    && isLyricSpanElement(lastElem)
+    && !lastElem.querySelector(VOICE_PART_SELECTOR)
+    && lastElem.children.length === 0
+  ) {
+    lastElem.appendChild(document.createTextNode(suffix));
+    return true;
+  }
+
+  const word = document.createElement('span');
+  word.className = 'word';
+  word.textContent = suffix;
+  parentP.appendChild(word);
+  return true;
+}
+
 function moveOverflowWordtopsToPreviousLine() {
   const sheetEl = getSheetEl();
   if (!sheetEl) {
@@ -1482,13 +1578,20 @@ function moveOverflowWordtopsToPreviousLine() {
   }
 
   Array.from(sheetEl.querySelectorAll('span.wordtop')).forEach((wordtop) => {
+    if (!wordtop.isConnected) {
+      return;
+    }
+    if (wordtop.querySelector(VOICE_PART_SELECTOR)) {
+      return;
+    }
+
     const cleanedText = cleanDisplayText(wordtop.textContent);
     if (cleanedText === '|') {
       wordtop.textContent = '| ';
       return;
     }
 
-    if (!(cleanedText.length > 1 && cleanedText.endsWith('|') && /[^|]/.test(cleanedText) && !cleanedText.startsWith('|'))) {
+    if (!isOverflowWordtopCandidate(wordtop)) {
       return;
     }
 
@@ -1496,8 +1599,14 @@ function moveOverflowWordtopsToPreviousLine() {
       return;
     }
 
-    const overflowText = cleanedText.replace(/\|+\s*$/, '').trim();
-    if (!overflowText || isRhythmMarkerOnlyText(overflowText) || startsWithRhythmMarker(overflowText) || containsVoiceMarkerSymbol(overflowText)) {
+    const hadTrailingBar = /\|+\s*$/.test(String(wordtop.textContent || ''));
+    const overflowText = cleanedText.replace(/\|+\s*$/, '').replace(/　/g, '').trim();
+    if (
+      !overflowText
+      || isRhythmMarkerOnlyText(overflowText)
+      || startsWithRhythmMarker(overflowText)
+      || containsVoiceMarkerSymbol(overflowText)
+    ) {
       return;
     }
 
@@ -1511,11 +1620,19 @@ function moveOverflowWordtopsToPreviousLine() {
       return;
     }
 
-    if (!mergeOverflowTextIntoLine(parentLine, previousWord, overflowText)) {
+    if (!appendOverflowLyricsToLine(parentLine, overflowText, { appendBar: hadTrailingBar })) {
       return;
     }
 
-    wordtop.textContent = '| ';
+    // 延伸・小節揃えが後段で効くよう、| は必ず span.word / wordtop 内に残す
+    if (hadTrailingBar) {
+      while (wordtop.firstChild) {
+        wordtop.removeChild(wordtop.firstChild);
+      }
+      wordtop.appendChild(document.createTextNode('| '));
+    } else {
+      wordtop.remove();
+    }
   });
 }
 
@@ -1643,6 +1760,520 @@ function applyChordDisplayTextTransforms() {
   });
 }
 
+function unwrapMeasureLayout(line) {
+  line.querySelectorAll(`span.${RC_BEAT_CLASS}`).forEach((beat) => {
+    const parent = beat.parentNode;
+    if (!parent) {
+      return;
+    }
+    while (beat.firstChild) {
+      parent.insertBefore(beat.firstChild, beat);
+    }
+    beat.remove();
+  });
+  line.querySelectorAll(`span.${RC_MEASURE_CLASS}`).forEach((measure) => {
+    const parent = measure.parentNode;
+    if (!parent) {
+      return;
+    }
+    while (measure.firstChild) {
+      parent.insertBefore(measure.firstChild, measure);
+    }
+    measure.remove();
+  });
+}
+
+function clearLyricBarExtendMarks(sheetEl) {
+  const root = sheetEl || getSheetEl();
+  if (!root) {
+    return;
+  }
+
+  root.querySelectorAll(SCORE_LINE_SELECTOR).forEach((line) => {
+    unwrapMeasureLayout(line);
+    line.classList.remove('rc-measure-align');
+  });
+  root.querySelectorAll(`span.${RC_BAR_EXTEND_GLYPH_CLASS}`).forEach((glyph) => {
+    glyph.replaceWith(document.createTextNode('|'));
+  });
+  root.querySelectorAll(`span.${RC_MEASURE_BAR_CLASS}`).forEach((glyph) => {
+    glyph.replaceWith(document.createTextNode(glyph.textContent || '|'));
+  });
+  root.querySelectorAll(`span.${RC_BAR_EXTEND_CLASS}`).forEach((span) => {
+    span.classList.remove(RC_BAR_EXTEND_CLASS);
+  });
+}
+
+function wrapPipesInTextNode(textNode, createGlyph) {
+  const text = textNode.nodeValue;
+  if (!text || !text.includes('|') || !textNode.parentNode) {
+    return false;
+  }
+
+  const fragment = document.createDocumentFragment();
+  let remaining = text;
+  while (remaining.length) {
+    const idx = remaining.indexOf('|');
+    if (idx === -1) {
+      fragment.appendChild(document.createTextNode(remaining));
+      break;
+    }
+    if (idx > 0) {
+      fragment.appendChild(document.createTextNode(remaining.slice(0, idx)));
+    }
+    fragment.appendChild(createGlyph());
+    remaining = remaining.slice(idx + 1);
+  }
+  textNode.parentNode.replaceChild(fragment, textNode);
+  return true;
+}
+
+function createExtendBarGlyph() {
+  const glyph = document.createElement('span');
+  glyph.className = RC_BAR_EXTEND_GLYPH_CLASS;
+  glyph.setAttribute('aria-hidden', 'true');
+  return glyph;
+}
+
+function createPlainMeasureBarGlyph() {
+  const glyph = document.createElement('span');
+  glyph.className = RC_MEASURE_BAR_CLASS;
+  glyph.textContent = '|';
+  return glyph;
+}
+
+function wrapAllPipesInLyricSpan(span, createGlyph) {
+  if (!span.textContent.includes('|')) {
+    return;
+  }
+
+  const factory = createGlyph || createExtendBarGlyph;
+  const textNodes = [];
+  const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    if (node.parentElement?.classList.contains(RC_BAR_EXTEND_GLYPH_CLASS)) {
+      continue;
+    }
+    if (node.parentElement?.classList.contains(RC_MEASURE_BAR_CLASS)) {
+      continue;
+    }
+    textNodes.push(node);
+  }
+
+  let wrapped = false;
+  textNodes.forEach((textNode) => {
+    if (!textNode.isConnected) {
+      return;
+    }
+    if (wrapPipesInTextNode(textNode, factory)) {
+      wrapped = true;
+    }
+  });
+  if (wrapped) {
+    span.classList.add(RC_BAR_EXTEND_CLASS);
+  }
+}
+
+function snapLyricBarExtendGlyphs(sheetEl) {
+  const root = sheetEl || getSheetEl();
+  if (!root) {
+    return;
+  }
+
+  const dpr = window.devicePixelRatio || 1;
+  const hairW = 1 / dpr;
+  root.querySelectorAll(`span.${RC_BAR_EXTEND_GLYPH_CLASS}`).forEach((glyph) => {
+    glyph.style.setProperty('--rc-bar-hair-w', `${hairW}px`);
+    glyph.style.removeProperty('--rc-bar-snap-x');
+    const left = glyph.getBoundingClientRect().left;
+    const snapped = Math.round(left * dpr) / dpr;
+    glyph.style.setProperty('--rc-bar-snap-x', `${snapped - left}px`);
+  });
+}
+
+function scheduleSnapLyricBarExtendGlyphs(sheetEl) {
+  snapLyricBarExtendGlyphs(sheetEl);
+  requestAnimationFrame(() => {
+    snapLyricBarExtendGlyphs(sheetEl);
+    requestAnimationFrame(() => snapLyricBarExtendGlyphs(sheetEl));
+  });
+}
+
+let barExtendSnapListening = false;
+function ensureBarExtendSnapListeners() {
+  if (barExtendSnapListening) {
+    return;
+  }
+  barExtendSnapListening = true;
+  window.addEventListener('resize', () => scheduleSnapLyricBarExtendGlyphs());
+}
+
+function markLyricBarExtendSpans(enabled, sheetEl) {
+  const root = sheetEl || getSheetEl();
+  if (!root) {
+    return;
+  }
+
+  clearLyricBarExtendMarks(root);
+  if (!enabled) {
+    return;
+  }
+
+  root.querySelectorAll(LYRICS_SPAN_SELECTOR).forEach((span) => {
+    if (span.textContent.includes('|')) {
+      wrapAllPipesInLyricSpan(span, createExtendBarGlyph);
+    }
+  });
+  ensureBarExtendSnapListeners();
+  scheduleSnapLyricBarExtendGlyphs(root);
+}
+
+function markPlainMeasureBarSpans(sheetEl) {
+  const root = sheetEl || getSheetEl();
+  if (!root) {
+    return;
+  }
+
+  root.querySelectorAll(LYRICS_SPAN_SELECTOR).forEach((span) => {
+    if (!span.textContent.includes('|')) {
+      return;
+    }
+    if (span.querySelector(MEASURE_BAR_SELECTOR)) {
+      return;
+    }
+    wrapAllPipesInLyricSpan(span, createPlainMeasureBarGlyph);
+  });
+}
+
+function isMeasureBarElement(el) {
+  return Boolean(
+    el
+    && el.nodeType === Node.ELEMENT_NODE
+    && el.classList
+    && (el.classList.contains(RC_BAR_EXTEND_GLYPH_CLASS) || el.classList.contains(RC_MEASURE_BAR_CLASS))
+  );
+}
+
+function wrapMeasureIntoBeats(measure) {
+  Array.from(measure.querySelectorAll(`:scope > span.${RC_BEAT_CLASS}`)).forEach((beat) => {
+    while (beat.firstChild) {
+      measure.insertBefore(beat.firstChild, beat);
+    }
+    beat.remove();
+  });
+
+  const nodes = Array.from(measure.childNodes);
+  if (!nodes.length) {
+    return;
+  }
+
+  const groups = [];
+  let current = [];
+  const flush = () => {
+    if (!current.length) {
+      return;
+    }
+    groups.push(current);
+    current = [];
+  };
+  const groupHasChord = () =>
+    current.some((n) => n.nodeType === Node.ELEMENT_NODE && n.classList.contains('chord'));
+
+  nodes.forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (!cleanDisplayText(node.textContent)) {
+        if (current.length) {
+          current.push(node);
+        }
+        return;
+      }
+      if (groupHasChord()) {
+        current.push(node);
+      } else {
+        flush();
+        current.push(node);
+      }
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      if (current.length) {
+        current.push(node);
+      }
+      return;
+    }
+
+    const isChord = node.classList.contains('chord');
+    const isWord = node.classList.contains('word') || node.classList.contains('wordtop');
+
+    if (isChord) {
+      flush();
+      current.push(node);
+      return;
+    }
+    if (isWord) {
+      if (groupHasChord() || (current.length && !groupHasChord())) {
+        current.push(node);
+      } else {
+        flush();
+        current.push(node);
+      }
+      return;
+    }
+
+    flush();
+    current.push(node);
+    flush();
+  });
+  flush();
+
+  groups.forEach((group) => {
+    if (!group.length) {
+      return;
+    }
+    if (group.length === 1 && group[0].nodeType === Node.TEXT_NODE && !cleanDisplayText(group[0].textContent)) {
+      return;
+    }
+    const beat = document.createElement('span');
+    beat.className = RC_BEAT_CLASS;
+    group[0].before(beat);
+    group.forEach((n) => beat.appendChild(n));
+  });
+}
+
+function promoteMeasureBars(line) {
+  Array.from(line.querySelectorAll(MEASURE_BAR_SELECTOR)).forEach((bar) => {
+    const parent = bar.parentElement;
+    if (!parent || parent === line) {
+      return;
+    }
+    if (!parent.classList.contains('word') && !parent.classList.contains('wordtop')) {
+      return;
+    }
+    if (!parent.parentNode) {
+      return;
+    }
+
+    if (bar.previousSibling) {
+      const beforeSpan = parent.cloneNode(false);
+      while (bar.previousSibling) {
+        beforeSpan.insertBefore(bar.previousSibling, beforeSpan.firstChild);
+      }
+      const keepBefore = cleanDisplayText(beforeSpan.textContent)
+        || beforeSpan.querySelector(VOICE_PART_SELECTOR)
+        || beforeSpan.querySelector(MEASURE_BAR_SELECTOR);
+      if (keepBefore) {
+        parent.parentNode.insertBefore(beforeSpan, parent);
+      }
+    }
+
+    if (!parent.parentNode) {
+      return;
+    }
+    parent.parentNode.insertBefore(bar, parent);
+
+    // 延伸グリフは textContent が空なので、残グリフ有無も見てから親を消す
+    const parentStillUseful = cleanDisplayText(parent.textContent)
+      || parent.querySelector(VOICE_PART_SELECTOR)
+      || parent.querySelector(MEASURE_BAR_SELECTOR)
+      || parent.querySelector('span.chord');
+    if (!parent.firstChild || !parentStillUseful) {
+      parent.remove();
+    }
+  });
+}
+
+function wrapLineIntoMeasures(line) {
+  unwrapMeasureLayout(line);
+  promoteMeasureBars(line);
+
+  const children = Array.from(line.children);
+  const barIndexes = [];
+  children.forEach((el, idx) => {
+    if (isMeasureBarElement(el)) {
+      barIndexes.push(idx);
+    }
+  });
+  if (barIndexes.length < 2) {
+    return null;
+  }
+
+  for (let b = barIndexes.length - 2; b >= 0; b -= 1) {
+    const start = barIndexes[b];
+    const end = barIndexes[b + 1];
+    const nodes = children.slice(start + 1, end);
+    const wrapper = document.createElement('span');
+    wrapper.className = RC_MEASURE_CLASS;
+    if (nodes.length) {
+      nodes[0].before(wrapper);
+      nodes.forEach((n) => wrapper.appendChild(n));
+    } else {
+      children[start].after(wrapper);
+    }
+    wrapMeasureIntoBeats(wrapper);
+  }
+
+  return {
+    line,
+    bars: Array.from(line.querySelectorAll(`:scope > ${MEASURE_BAR_SELECTOR}`)),
+    measures: Array.from(line.querySelectorAll(`:scope > span.${RC_MEASURE_CLASS}`))
+  };
+}
+
+function hasBlockBoundaryBetween(fromLine, toLine) {
+  let el = fromLine.nextElementSibling;
+  while (el && el !== toLine) {
+    if (el.matches?.(BLOCK_BOUNDARY_SELECTOR)) {
+      return true;
+    }
+    if (el.matches?.(SCORE_LINE_SELECTOR)) {
+      return false;
+    }
+    el = el.nextElementSibling;
+  }
+  return el !== toLine;
+}
+
+function collectScoreLineBlocks(sheetEl) {
+  const root = sheetEl || getSheetEl();
+  if (!root) {
+    return [];
+  }
+
+  const lines = Array.from(root.querySelectorAll(SCORE_LINE_SELECTOR));
+  const blocks = [];
+  let current = [];
+
+  lines.forEach((line) => {
+    if (!current.length) {
+      current.push(line);
+      return;
+    }
+    const prev = current[current.length - 1];
+    if (hasBlockBoundaryBetween(prev, line)) {
+      blocks.push(current);
+      current = [line];
+    } else {
+      current.push(line);
+    }
+  });
+  if (current.length) {
+    blocks.push(current);
+  }
+  return blocks;
+}
+
+function applyMeasureColumnWidths(parsedLines) {
+  const maxMeasures = Math.max(0, ...parsedLines.map((p) => p.measures.length));
+  if (maxMeasures === 0) {
+    return;
+  }
+
+  const colWidths = Array(maxMeasures).fill(0);
+  parsedLines.forEach((p) => {
+    p.measures.forEach((measure, i) => {
+      measure.style.minWidth = '';
+      measure.style.width = '';
+      // 自然幅計測時は中身サイズで測る（伸長 flex だと余分に広がる）
+      measure.querySelectorAll(`:scope > span.${RC_BEAT_CLASS}`).forEach((beat) => {
+        beat.style.flex = '0 0 auto';
+        beat.style.minWidth = '';
+        beat.style.whiteSpace = 'nowrap';
+      });
+      const w = measure.getBoundingClientRect().width;
+      if (w > colWidths[i]) {
+        colWidths[i] = w;
+      }
+    });
+  });
+
+  parsedLines.forEach((p) => {
+    p.line.classList.add('rc-measure-align');
+    p.measures.forEach((measure, i) => {
+      const w = Math.ceil(colWidths[i]);
+      measure.style.boxSizing = 'border-box';
+      measure.style.display = 'inline-flex';
+      measure.style.justifyContent = 'flex-start';
+      measure.style.alignItems = 'baseline';
+      measure.style.verticalAlign = 'baseline';
+      measure.style.minWidth = `${w}px`;
+      measure.style.width = `${w}px`;
+
+      // 余白だけ均等に伸ばす（縮めない／折り返さない）
+      measure.querySelectorAll(`:scope > span.${RC_BEAT_CLASS}`).forEach((beat) => {
+        beat.style.display = 'inline-flex';
+        beat.style.alignItems = 'baseline';
+        beat.style.justifyContent = 'flex-start';
+        beat.style.flex = '1 0 auto';
+        beat.style.minWidth = '';
+        beat.style.whiteSpace = 'nowrap';
+        beat.style.boxSizing = 'border-box';
+      });
+    });
+  });
+}
+
+function stripIdeographicSpacesInLineLyrics(line) {
+  line.querySelectorAll(LYRICS_SPAN_SELECTOR).forEach((span) => {
+    const textNodes = [];
+    const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      textNodes.push(node);
+    }
+    textNodes.forEach((tn) => {
+      if (tn.nodeValue && tn.nodeValue.includes('　')) {
+        tn.nodeValue = tn.nodeValue.replace(/　/g, '');
+      }
+    });
+  });
+}
+
+function alignMeasureBarsInBlocks(sheetEl) {
+  const blocks = collectScoreLineBlocks(sheetEl);
+  blocks.forEach((lines) => {
+    const parsedLines = [];
+    lines.forEach((line) => {
+      stripIdeographicSpacesInLineLyrics(line);
+      const parsed = wrapLineIntoMeasures(line);
+      if (parsed && parsed.measures.length > 0) {
+        parsedLines.push(parsed);
+      }
+    });
+    if (parsedLines.length < 2) {
+      return;
+    }
+
+    // 小節が少ない行は空小節で埋めず末尾も閉じない。先頭からの列幅だけ揃える
+    applyMeasureColumnWidths(parsedLines);
+  });
+}
+
+function applyMeasureBarDisplayFeatures(sheetEl) {
+  const root = sheetEl || getSheetEl();
+  if (!root || !displayPrefsState.enabled) {
+    return;
+  }
+
+  const extendBarUpward = displayPrefsState.extendBarUpward === true;
+  const alignMeasureBars = displayPrefsState.alignMeasureBars === true;
+  if (!extendBarUpward && !alignMeasureBars) {
+    clearLyricBarExtendMarks(root);
+    return;
+  }
+
+  markLyricBarExtendSpans(extendBarUpward, root);
+  if (alignMeasureBars && !extendBarUpward) {
+    markPlainMeasureBarSpans(root);
+  }
+  if (alignMeasureBars) {
+    alignMeasureBarsInBlocks(root);
+    if (extendBarUpward) {
+      scheduleSnapLyricBarExtendGlyphs(root);
+    }
+  }
+}
+
 function applyChordLayoutAdjustments() {
   const sheetEl = getSheetEl();
   if (!sheetEl) {
@@ -1659,68 +2290,68 @@ function applyChordLayoutAdjustments() {
   applyChordDisplayTextTransforms();
   applyVoiceMarkerSymbolClasses();
 
-  if (!(displayPrefsState.enabled && displayPrefsState.adjustChordPos)) {
-    return;
-  }
+  if (displayPrefsState.enabled && displayPrefsState.adjustChordPos) {
+    sheetEl.querySelectorAll('p.line:not(.blank)').forEach((lineEl) => {
+      const spans = Array.from(lineEl.children);
 
-  sheetEl.querySelectorAll('p.line').forEach((lineEl) => {
-    const spans = Array.from(lineEl.children);
-
-    spans.forEach((spanEl, index) => {
-      if (!spanEl.classList.contains('chord')) {
-        return;
-      }
-
-      const lyricEl = spans.slice(index + 1).find((candidate) => isLyricSpanElement(candidate));
-      if (!lyricEl) {
-        return;
-      }
-
-      const trimmedLyric = cleanDisplayText(lyricEl.textContent);
-      if (!trimmedLyric || /^([>\-]+)$/.test(trimmedLyric) || trimmedLyric.length === 1) {
-        return;
-      }
-
-      const chordText = cleanDisplayText(spanEl.textContent);
-      if (!isChordTextAllowed(chordText)) {
-        return;
-      }
-
-      const chordWidth = Math.ceil(spanEl.getBoundingClientRect().width);
-      const lyricWidth = Math.ceil(lyricEl.getBoundingClientRect().width);
-      if ((chordWidth - lyricWidth) >= 8) {
-        lyricEl.style.display = 'inline-block';
-        lyricEl.style.minWidth = `${chordWidth + 2}px`;
-        lyricEl.classList.add('cw-adjusted-lyric');
-      }
-
-      const chordLeft = spanEl.getBoundingClientRect().left;
-      const lyricLeft = lyricEl.getBoundingClientRect().left;
-      const diff = lyricLeft - chordLeft;
-      if (diff <= 20) {
-        return;
-      }
-
-      const nextChord = spans.slice(index + 1).find((candidate) => candidate.classList?.contains('chord'));
-      const minChordGap = 24;
-      let shift = -diff * 0.75;
-      if (Math.abs(shift) > 20) {
-        shift = shift < 0 ? -16 : 16;
-      }
-
-      if (nextChord) {
-        const nextChordLeft = nextChord.getBoundingClientRect().left;
-        const predictedLeft = lyricLeft + shift;
-        if ((nextChordLeft - predictedLeft) < minChordGap) {
+      spans.forEach((spanEl, index) => {
+        if (!spanEl.classList.contains('chord')) {
           return;
         }
-      }
 
-      const currentMargin = Number.parseFloat(window.getComputedStyle(lyricEl).marginLeft) || 0;
-      lyricEl.style.marginLeft = `${currentMargin + shift}px`;
-      lyricEl.classList.add('cw-shifted-lyric');
+        const lyricEl = spans.slice(index + 1).find((candidate) => isLyricSpanElement(candidate));
+        if (!lyricEl) {
+          return;
+        }
+
+        const trimmedLyric = cleanDisplayText(lyricEl.textContent);
+        if (!trimmedLyric || /^([>\-]+)$/.test(trimmedLyric) || trimmedLyric.length === 1) {
+          return;
+        }
+
+        const chordText = cleanDisplayText(spanEl.textContent);
+        if (!isChordTextAllowed(chordText)) {
+          return;
+        }
+
+        const chordWidth = Math.ceil(spanEl.getBoundingClientRect().width);
+        const lyricWidth = Math.ceil(lyricEl.getBoundingClientRect().width);
+        if ((chordWidth - lyricWidth) >= 8) {
+          lyricEl.style.display = 'inline-block';
+          lyricEl.style.minWidth = `${chordWidth + 2}px`;
+          lyricEl.classList.add('cw-adjusted-lyric');
+        }
+
+        const chordLeft = spanEl.getBoundingClientRect().left;
+        const lyricLeft = lyricEl.getBoundingClientRect().left;
+        const diff = lyricLeft - chordLeft;
+        if (diff <= 20) {
+          return;
+        }
+
+        const nextChord = spans.slice(index + 1).find((candidate) => candidate.classList?.contains('chord'));
+        const minChordGap = 24;
+        let shift = -diff * 0.75;
+        if (Math.abs(shift) > 20) {
+          shift = shift < 0 ? -16 : 16;
+        }
+
+        if (nextChord) {
+          const nextChordLeft = nextChord.getBoundingClientRect().left;
+          const predictedLeft = lyricLeft + shift;
+          if ((nextChordLeft - predictedLeft) < minChordGap) {
+            return;
+          }
+        }
+
+        const currentMargin = Number.parseFloat(window.getComputedStyle(lyricEl).marginLeft) || 0;
+        lyricEl.style.marginLeft = `${currentMargin + shift}px`;
+        lyricEl.classList.add('cw-shifted-lyric');
+      });
     });
-  });
+  }
+
+  applyMeasureBarDisplayFeatures(sheetEl);
 }
 
 function setDisplayPreferencesCollapsed(collapsed) {
